@@ -1,5 +1,5 @@
-export const BASE_SALARY = 1300;
-export const FREE_ABSENTS_PER_MONTH = 2;
+export const BASE_SALARY = 12345;
+export const FREE_ABSENTS_PER_MONTH = 6;
 
 export const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",

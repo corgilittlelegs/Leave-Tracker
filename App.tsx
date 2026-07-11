@@ -5,6 +5,7 @@ import { StatCard } from './components/StatCard';
 import { SalaryVisualization } from './components/SalaryVisualization';
 import { MonthlySummaryModal } from './components/MonthlySummaryModal';
 import { QuickCashAdvanceModal } from './components/QuickCashAdvanceModal';
+import { WelcomeOnboardingModal } from './components/WelcomeOnboardingModal';
 import { AttendanceRecord, AttendanceStatus, MonthStats, CashAdvance } from './types';
 import { BASE_SALARY, FREE_ABSENTS_PER_MONTH, MONTH_NAMES } from './constants';
 import { generateSyncCode, saveTrackerData, subscribeToTracker, checkSyncCodeExists, updateSingleAttendance, addCashAdvance, deleteCashAdvance, updateConfig } from './firebase';
@@ -85,6 +86,54 @@ const App: React.FC = () => {
   const [isDisconnecting, setIsDisconnecting] = useState<boolean>(false);
   const [salaryError, setSalaryError] = useState<string | null>(null);
   const [leavesError, setLeavesError] = useState<string | null>(null);
+
+  // --- Onboarding State ---
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
+    const completed = localStorage.getItem('maid-setup-completed') === 'true';
+    const hasSyncCode = !!localStorage.getItem('maid-sync-code');
+    return !completed && !hasSyncCode;
+  });
+
+  const handleCompleteOnboarding = (salary: number, leaves: number) => {
+    setBaseSalary(salary);
+    setFreeAbsentsPerMonth(leaves);
+    setSalaryInput(String(salary));
+    setLeavesInput(String(leaves));
+
+    localStorage.setItem('maid-base-salary', String(salary));
+    localStorage.setItem('maid-free-absents', String(leaves));
+    localStorage.setItem('maid-setup-completed', 'true');
+
+    // Ensure sync code is generated (triggers Firestore collection init)
+    if (!syncCode) {
+      const newCode = generateSyncCode();
+      setSyncCode(newCode);
+      localStorage.setItem('maid-sync-code', newCode);
+    }
+
+    setShowOnboarding(false);
+  };
+
+  const handleLinkOnboarding = async (linkedSyncCode: string): Promise<{ success: boolean; error?: string }> => {
+    if (linkedSyncCode === syncCode) {
+      return { success: false, error: 'Already connected to this Sync Code!' };
+    }
+    try {
+      const exists = await checkSyncCodeExists(linkedSyncCode);
+      if (exists) {
+        localStorage.setItem('maid-sync-code', linkedSyncCode);
+        localStorage.setItem('maid-setup-completed', 'true');
+        setSyncCode(linkedSyncCode);
+        setIsSyncReady(false);
+        setShowOnboarding(false);
+        return { success: true };
+      } else {
+        return { success: false, error: 'Code not found. Please double-check.' };
+      }
+    } catch (err) {
+      return { success: false, error: 'Failed to verify code. Please try again.' };
+    }
+  };
 
   // 1. Initial Local Storage Cache loading
   useEffect(() => {
@@ -653,6 +702,14 @@ const App: React.FC = () => {
         netPayable={netPayable}
         freeAbsentsPerMonth={freeAbsentsPerMonth}
         syncCode={syncCode}
+      />
+
+      <WelcomeOnboardingModal
+        isOpen={showOnboarding}
+        defaultBaseSalary={BASE_SALARY}
+        defaultFreeLeaves={FREE_ABSENTS_PER_MONTH}
+        onComplete={handleCompleteOnboarding}
+        onLink={handleLinkOnboarding}
       />
 
       {/* Settings Sliding Drawer */}

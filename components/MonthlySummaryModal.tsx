@@ -138,10 +138,10 @@ export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto print:p-0 print:bg-white print:absolute print:inset-0">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto print:p-0 print:bg-white print:absolute print:inset-0 animate-fade-in">
       
       {/* Modal Card wrapper - print styles force it to occupy the whole screen with no rounded corners/shadows */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden print:shadow-none print:border-none print:max-h-full print:rounded-none print:w-full print:h-full">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden print:shadow-none print:border-none print:max-h-full print:rounded-none print:w-full print:h-full animate-zoom-in">
         
         {/* Header - Hidden during print */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 shrink-0 print:hidden">
