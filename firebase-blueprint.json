@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "Tracker": {
+      "title": "Tracker",
+      "description": "State tracking for a maid, including base salary, free leaves, attendance records, and cash advances.",
+      "type": "object",
+      "properties": {
+        "attendance": {
+          "type": "object",
+          "description": "A map of date strings (YYYY-MM-DD) to attendance status ('PRESENT' | 'ABSENT' | 'UNMARKED')."
+        },
+        "baseSalary": {
+          "type": "number",
+          "description": "Monthly base salary of the maid."
+        },
+        "freeAbsentsPerMonth": {
+          "type": "number",
+          "description": "Number of free absent days allowed per month."
+        },
+        "cashAdvances": {
+          "type": "array",
+          "description": "List of recorded cash advances requested by the maid."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the data was last saved to the cloud."
+        }
+      },
+      "required": ["attendance", "baseSalary", "freeAbsentsPerMonth"]
+    }
+  },
+  "firestore": {
+    "/trackers/{syncCode}": {
+      "schema": "Tracker",
+      "description": "Stores tracking data for each sync code group."
+    }
+  }
+}
