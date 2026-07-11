@@ -10,6 +10,7 @@ interface AttendanceCalendarProps {
   onNextMonth: () => void;
   attendance: Record<string, AttendanceStatus>;
   onDateClick: (dateStr: string) => void;
+  onDateLongPress?: (dateStr: string) => void;
   isReadOnly?: boolean;
 }
 
@@ -20,6 +21,7 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
   onNextMonth,
   attendance,
   onDateClick,
+  onDateLongPress,
   isReadOnly = false,
 }) => {
   const year = currentDate.getFullYear();
@@ -50,6 +52,45 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       case 'PRESENT': return isImplicit ? 'AUTO' : 'P';
       case 'ABSENT': return 'A';
       default: return '';
+    }
+  };
+
+  // Long-press detection states/refs
+  const longPressTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLongPressActive = React.useRef<boolean>(false);
+
+  // Clean up timer on unmount
+  React.useEffect(() => {
+    return () => {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    };
+  }, []);
+
+  const handlePointerDown = (dateStr: string) => {
+    if (isReadOnly) return;
+    isLongPressActive.current = false;
+    
+    // Clear any existing timer just in case
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    
+    longPressTimer.current = setTimeout(() => {
+      onDateLongPress?.(dateStr);
+      isLongPressActive.current = true;
+      longPressTimer.current = null;
+    }, 600); // 600ms long press threshold
+  };
+
+  const handlePointerUp = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handlePointerCancel = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
     }
   };
 
@@ -95,7 +136,7 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
         } else if (displayStatus === 'ABSENT') {
           statusStr = 'Absent';
         }
-        const actionStr = isReadOnly ? 'read only' : 'tap to toggle status';
+        const actionStr = isReadOnly ? 'read only' : 'tap to toggle status, tap & hold to add cash advance';
         const todayLabel = isToday ? 'Today, ' : '';
         return `${todayLabel}${dateStrLong}: ${statusStr}, ${actionStr}`;
       };
@@ -103,12 +144,25 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       days.push(
         <button
           key={dateStr}
-          onClick={() => !isReadOnly && onDateClick(dateStr)}
+          onPointerDown={() => handlePointerDown(dateStr)}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+          onPointerLeave={handlePointerCancel}
+          onContextMenu={(e) => e.preventDefault()}
+          onClick={(e) => {
+            if (isReadOnly) return;
+            if (isLongPressActive.current) {
+              e.preventDefault();
+              isLongPressActive.current = false;
+              return;
+            }
+            onDateClick(dateStr);
+          }}
           disabled={isReadOnly}
           aria-label={getAriaLabel()}
           className={`
             relative h-11 sm:h-14 rounded-lg border text-sm sm:text-base font-semibold transition-all duration-200
-            flex items-center justify-center flex-col shadow-2xs
+            flex items-center justify-center flex-col shadow-2xs select-none touch-callout-none
             ${getStatusColor(displayStatus, isImplicit)}
             ${isToday ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 ring-offset-2 dark:ring-offset-slate-900 shadow-md scale-[1.02]' : ''}
             ${isReadOnly ? 'cursor-not-allowed opacity-90' : 'cursor-pointer hover:scale-[1.04] active:scale-95'}

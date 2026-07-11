@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Wallet, CalendarCheck, CalendarX, Calculator, Coins, Download, Sliders, Lock, Cloud, Copy, Check, RefreshCw, AlertCircle, Trash2, Banknote, FileText, Moon, Sun } from 'lucide-react';
+import { Wallet, CalendarCheck, CalendarX, Calculator, Coins, Download, Sliders, Lock, Cloud, Copy, Check, RefreshCw, AlertCircle, Trash2, Banknote, FileText, Moon, Sun, ChevronDown, Settings, X } from 'lucide-react';
 import { AttendanceCalendar } from './components/AttendanceCalendar';
 import { StatCard } from './components/StatCard';
 import { SalaryVisualization } from './components/SalaryVisualization';
-import { CashAdvances } from './components/CashAdvances';
 import { MonthlySummaryModal } from './components/MonthlySummaryModal';
+import { QuickCashAdvanceModal } from './components/QuickCashAdvanceModal';
 import { AttendanceRecord, AttendanceStatus, MonthStats, CashAdvance } from './types';
 import { BASE_SALARY, FREE_ABSENTS_PER_MONTH, MONTH_NAMES } from './constants';
 import { generateSyncCode, saveTrackerData, subscribeToTracker, checkSyncCodeExists, updateSingleAttendance, addCashAdvance, deleteCashAdvance, updateConfig } from './firebase';
@@ -32,6 +32,9 @@ const App: React.FC = () => {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [attendance, setAttendance] = useState<AttendanceRecord>({});
   const [isSummaryOpen, setIsSummaryOpen] = useState<boolean>(false);
+  const [isActionsOpen, setIsActionsOpen] = useState<boolean>(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [longPressedDate, setLongPressedDate] = useState<string | null>(null);
   const [cashAdvances, setCashAdvances] = useState<CashAdvance[]>(() => {
     const saved = localStorage.getItem('maid-cash-advances');
     return saved ? JSON.parse(saved) : [];
@@ -437,7 +440,7 @@ const App: React.FC = () => {
                 <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">Attendance & Salary Tracker</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => setDarkMode(!darkMode)}
@@ -446,7 +449,15 @@ const App: React.FC = () => {
                 >
                   {darkMode ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-indigo-600" />}
                 </button>
-                <span className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-full text-xs font-semibold border border-indigo-100 dark:border-indigo-900 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                  title="Configurations & Sync"
+                >
+                  <Settings className="w-5 h-5" />
+                </button>
+                <span className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-full text-xs font-semibold border border-indigo-100 dark:border-indigo-900 shadow-sm hidden sm:inline-block">
                     Base: ₹{baseSalary.toLocaleString()}
                 </span>
             </div>
@@ -462,28 +473,55 @@ const App: React.FC = () => {
                 <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-white tracking-tight">
                     Dashboard for {MONTH_NAMES[currentDate.getMonth()]} {currentDate.getFullYear()}
                 </h2>
-                <div className="flex flex-row flex-wrap sm:flex-nowrap gap-2 w-full md:w-auto items-stretch justify-start">
+                <div className="relative w-fit">
                     <button 
-                      onClick={() => setIsSummaryOpen(true)}
-                      className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs sm:text-sm font-semibold transition-all hover:scale-[1.02] shadow-xs cursor-pointer"
+                      onClick={() => setIsActionsOpen(!isActionsOpen)}
+                      className="flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs sm:text-sm font-semibold transition-all hover:scale-[1.02] shadow-xs cursor-pointer"
                     >
-                        <FileText className="w-4 h-4" />
-                        <span>Print Slip</span>
+                        <span>Actions</span>
+                        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isActionsOpen ? 'rotate-180' : ''}`} />
                     </button>
-                    <button 
-                      onClick={() => downloadCSV('month')}
-                      className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-white transition-all hover:scale-[1.02] shadow-xs cursor-pointer"
-                    >
-                        <Download className="w-4 h-4" />
-                        <span>Export Month</span>
-                    </button>
-                    <button 
-                      onClick={() => downloadCSV('year')}
-                      className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-white transition-all hover:scale-[1.02] shadow-xs cursor-pointer"
-                    >
-                        <Download className="w-4 h-4" />
-                        <span>Export Year</span>
-                    </button>
+                    {isActionsOpen && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-30" 
+                          onClick={() => setIsActionsOpen(false)}
+                        />
+                        <div className="absolute left-0 md:left-auto md:right-0 mt-2 w-48 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl shadow-lg py-1.5 z-40 origin-top-left md:origin-top-right">
+                          <button
+                            onClick={() => {
+                              setIsSummaryOpen(true);
+                              setIsActionsOpen(false);
+                            }}
+                            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs sm:text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-left transition-colors cursor-pointer font-medium"
+                          >
+                            <FileText className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
+                            <span>Print Slip</span>
+                          </button>
+                          <div className="border-t border-slate-100 dark:border-slate-700/60 my-1" />
+                          <button
+                            onClick={() => {
+                              downloadCSV('month');
+                              setIsActionsOpen(false);
+                            }}
+                            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs sm:text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-left transition-colors cursor-pointer"
+                          >
+                            <Download className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                            <span>Export Month</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              downloadCSV('year');
+                              setIsActionsOpen(false);
+                            }}
+                            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs sm:text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-left transition-colors cursor-pointer"
+                          >
+                            <Download className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                            <span>Export Year</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
                 </div>
             </div>
 
@@ -547,193 +585,14 @@ const App: React.FC = () => {
                 onPrevMonth={handlePrevMonth}
                 attendance={attendance}
                 onDateClick={toggleAttendance}
+                onDateLongPress={setLongPressedDate}
                 isReadOnly={isPastMonth}
              />
-
-             {/* Salary & Policy Settings */}
-             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-xl p-6 shadow-sm">
-                <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                   <Sliders className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                   Salary & Policy Configuration
-                </h3>
-                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label htmlFor="base-salary-input" className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                      Monthly Base Salary (₹)
-                    </label>
-                    <div className="relative rounded-lg shadow-sm">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                        <span className="text-slate-400 dark:text-slate-500 sm:text-sm">₹</span>
-                      </div>
-                      <input
-                        type="text"
-                        name="base-salary"
-                        id="base-salary-input"
-                        className={`block w-full rounded-lg bg-white dark:bg-slate-900 border pl-7 pr-3 py-2 text-slate-800 dark:text-white placeholder:text-slate-400 focus:ring-1 sm:text-sm outline-none transition-all text-sm font-medium ${salaryError ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500' : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500'}`}
-                        placeholder="e.g. 1300"
-                        value={salaryInput}
-                        onChange={(e) => handleSalaryInputChange(e.target.value)}
-                      />
-                    </div>
-                    {salaryError && (
-                      <p className="text-[11px] text-rose-500 mt-1 font-medium">{salaryError}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label htmlFor="free-leaves-input" className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                      Allowed Paid Leaves / Month
-                    </label>
-                    <input
-                      type="text"
-                      name="free-leaves"
-                      id="free-leaves-input"
-                      className={`block w-full rounded-lg bg-white dark:bg-slate-900 border px-3 py-2 text-slate-800 dark:text-white placeholder:text-slate-400 focus:ring-1 sm:text-sm outline-none transition-all text-sm font-medium ${leavesError ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500' : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500'}`}
-                      placeholder="e.g. 2"
-                      value={leavesInput}
-                      onChange={(e) => handleLeavesInputChange(e.target.value)}
-                    />
-                    {leavesError && (
-                      <p className="text-[11px] text-rose-500 mt-1 font-medium">{leavesError}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/40 rounded-lg p-3 border border-slate-100 dark:border-slate-800 space-y-1">
-                  <p className="font-semibold text-slate-700 dark:text-slate-300">How this is calculated:</p>
-                  <p>• Daily rate: <code className="font-mono text-indigo-600 dark:text-indigo-400">₹Salary / Days in month</code> (₹{baseSalary.toLocaleString()} / {stats.totalDays} days = ₹{stats.dailyRate.toFixed(2)}/day).</p>
-                  <p>• Days until today are assumed <span className="font-semibold text-emerald-600 dark:text-emerald-400">Present</span> by default unless marked <span className="font-semibold text-rose-600 dark:text-rose-400">Absent</span>.</p>
-                  <p>• Up to <span className="font-semibold text-slate-800 dark:text-slate-200">{freeAbsentsPerMonth} days</span> of marked absences are counted as fully paid leaves.</p>
-                </div>
-             </div>
           </div>
 
           {/* Right: Charts & Breakdown (Takes up 1 col) */}
           <div className="space-y-6">
-            {/* Cloud Sync & Backup Card */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700/50 p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="bg-indigo-50 dark:bg-indigo-950/40 p-2 rounded-lg">
-                    <Cloud className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800 dark:text-white">Cloud Sync & Backup</h3>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500">Continuous background sync</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-850 px-2.5 py-1 rounded-full">
-                  <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
-                  <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    {isSyncing ? 'Syncing' : 'Live'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 rounded-lg p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Your device Sync Code</span>
-                  <button 
-                    onClick={handleCopySyncCode}
-                    className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                        <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <p className="text-sm font-mono font-bold text-slate-700 dark:text-slate-300 tracking-wider text-center py-1 bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/50 rounded-md select-all">
-                  {syncCode || 'Generating...'}
-                </p>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 text-center">
-                  Share this code with your other devices to sync real-time!
-                </p>
-              </div>
-
-              {/* Link other device form */}
-              <form onSubmit={handleLinkDevice} className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Link with another device
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={linkInput}
-                    onChange={(e) => setLinkInput(e.target.value)}
-                    placeholder="e.g. MP-ABCD-EFGH"
-                    className="block w-full rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-700 dark:text-white font-mono placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isSyncing || !linkInput.trim()}
-                    className="px-3 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-850 dark:disabled:text-slate-600 rounded-lg text-xs font-semibold transition-colors shadow-xs cursor-pointer"
-                  >
-                    Link
-                  </button>
-                </div>
-                {syncError && (
-                  <div className="flex items-start gap-1 text-rose-600 dark:text-rose-400 text-[11px] mt-1 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/50 rounded-md p-1.5">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                    <span>{syncError}</span>
-                  </div>
-                )}
-              </form>
-
-              {/* Disconnect / Reset option */}
-              <div className="pt-2 flex justify-between items-center text-[11px]">
-                {isDisconnecting ? (
-                  <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/50 p-1.5 rounded-md w-full justify-between animate-fade-in">
-                    <span className="text-rose-700 dark:text-rose-300 font-medium">Reset sync code?</span>
-                    <div className="flex gap-1.5">
-                      <button
-                        type="button"
-                        onClick={handleGenerateNewCode}
-                        className="px-2 py-0.5 bg-rose-600 text-white font-semibold rounded hover:bg-rose-700 transition-colors cursor-pointer"
-                      >
-                        Yes
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsDisconnecting(false)}
-                        className="px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors cursor-pointer"
-                      >
-                        No
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <span className="text-slate-400 dark:text-slate-500">Need a fresh start?</span>
-                    <button
-                      type="button"
-                      onClick={() => setIsDisconnecting(true)}
-                      className="flex items-center gap-1 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors font-medium cursor-pointer"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      Disconnect Code
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-
             <SalaryVisualization stats={stats} freeAbsentsPerMonth={freeAbsentsPerMonth} />
-
-            <CashAdvances
-              cashAdvances={cashAdvances}
-              currentDate={currentDate}
-              baseSalary={baseSalary}
-              onAddAdvance={handleAddAdvance}
-              onDeleteAdvance={handleDeleteAdvance}
-            />
             
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700/50 p-6">
                 <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Calculation Detail</h3>
@@ -795,6 +654,230 @@ const App: React.FC = () => {
         freeAbsentsPerMonth={freeAbsentsPerMonth}
         syncCode={syncCode}
       />
+
+      {/* Settings Sliding Drawer */}
+      <div className={`fixed inset-0 z-50 overflow-hidden print:hidden transition-all duration-300 ${isSettingsOpen ? 'visible pointer-events-auto' : 'invisible pointer-events-none'}`}>
+        {/* Backdrop */}
+        <div 
+          className={`absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-300 ${isSettingsOpen ? 'opacity-100' : 'opacity-0'}`}
+          onClick={() => setIsSettingsOpen(false)}
+        />
+        
+        <div className="absolute inset-y-0 right-0 pl-10 max-w-full flex">
+          <div className={`w-screen max-w-md bg-white dark:bg-slate-900 shadow-2xl flex flex-col border-l border-slate-200 dark:border-slate-800 transform transition-transform duration-300 ease-in-out ${isSettingsOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+              
+              {/* Header */}
+              <div className="px-6 py-5 bg-slate-50 dark:bg-slate-950/40 border-b border-slate-100 dark:border-slate-850 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-indigo-600 dark:text-indigo-400 animate-[spin_4s_linear_infinite]" />
+                  <h2 className="text-lg font-bold text-slate-800 dark:text-white">Configurations & Sync</h2>
+                </div>
+                <button
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* 1. Salary & Policy Configuration */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <Sliders className="w-4 h-4 text-indigo-500" />
+                    Salary & Policy
+                  </h3>
+                  
+                  <div className="space-y-4 bg-slate-50/50 dark:bg-slate-900/25 border border-slate-150 dark:border-slate-800/80 rounded-xl p-4">
+                    <div>
+                      <label htmlFor="drawer-base-salary-input" className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                        Monthly Base Salary (₹)
+                      </label>
+                      <div className="relative rounded-lg shadow-xs">
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                          <span className="text-slate-400 dark:text-slate-500 text-sm">₹</span>
+                        </div>
+                        <input
+                          type="text"
+                          name="base-salary"
+                          id="drawer-base-salary-input"
+                          className={`block w-full rounded-lg bg-white dark:bg-slate-900 border pl-7 pr-3 py-2 text-slate-800 dark:text-white placeholder:text-slate-400 focus:ring-1 text-sm outline-none transition-all font-medium ${salaryError ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500' : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500'}`}
+                          placeholder="e.g. 1300"
+                          value={salaryInput}
+                          onChange={(e) => handleSalaryInputChange(e.target.value)}
+                        />
+                      </div>
+                      {salaryError && (
+                        <p className="text-[11px] text-rose-500 mt-1 font-medium">{salaryError}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label htmlFor="drawer-free-leaves-input" className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                        Allowed Paid Leaves / Month
+                      </label>
+                      <input
+                        type="text"
+                        name="free-leaves"
+                        id="drawer-free-leaves-input"
+                        className={`block w-full rounded-lg bg-white dark:bg-slate-900 border px-3 py-2 text-slate-800 dark:text-white placeholder:text-slate-400 focus:ring-1 text-sm outline-none transition-all font-medium ${leavesError ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500' : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500'}`}
+                        placeholder="e.g. 2"
+                        value={leavesInput}
+                        onChange={(e) => handleLeavesInputChange(e.target.value)}
+                      />
+                      {leavesError && (
+                        <p className="text-[11px] text-rose-500 mt-1 font-medium">{leavesError}</p>
+                      )}
+                    </div>
+
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 rounded-lg p-3 space-y-1">
+                      <p className="font-semibold text-slate-700 dark:text-slate-300">How this is calculated:</p>
+                      <p>• Daily rate: <code className="font-mono text-indigo-600 dark:text-indigo-400">₹Salary / Days</code> (₹{baseSalary.toLocaleString()} / {stats.totalDays} = ₹{stats.dailyRate.toFixed(2)}/day).</p>
+                      <p>• Days until today are assumed <span className="font-semibold text-emerald-600 dark:text-emerald-400">Present</span> by default.</p>
+                      <p>• Up to <span className="font-semibold text-slate-800 dark:text-slate-200">{freeAbsentsPerMonth} days</span> of marked absences are fully paid leaves.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Cloud Sync & Backup */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <Cloud className="w-4 h-4 text-indigo-500" />
+                    Cloud Sync & Backup
+                  </h3>
+                  
+                  <div className="space-y-4 bg-slate-50/50 dark:bg-slate-900/25 border border-slate-150 dark:border-slate-800/80 rounded-xl p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-semibold">Status</span>
+                      <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-2.5 py-0.5 rounded-full shadow-2xs">
+                        <span className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+                        <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                          {isSyncing ? 'Syncing' : 'Live'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800/80 rounded-lg p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Your device Sync Code</span>
+                        <button 
+                          onClick={handleCopySyncCode}
+                          className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
+                        >
+                          {copied ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copy</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-sm font-mono font-bold text-slate-700 dark:text-slate-300 tracking-wider text-center py-1 bg-slate-50 dark:bg-slate-850/80 border border-slate-200/60 dark:border-slate-700/50 rounded-md select-all">
+                        {syncCode || 'Generating...'}
+                      </p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 text-center">
+                        Share this code with your other devices to sync real-time!
+                      </p>
+                    </div>
+
+                    {/* Link other device form */}
+                    <form onSubmit={handleLinkDevice} className="space-y-2 pt-2 border-t border-slate-200/65 dark:border-slate-800/80">
+                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        Link with another device
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={linkInput}
+                          onChange={(e) => setLinkInput(e.target.value)}
+                          placeholder="e.g. MP-ABCD-EFGH"
+                          className="block w-full rounded-lg bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-700 dark:text-white font-mono placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isSyncing || !linkInput.trim()}
+                          className="px-3 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-850 dark:disabled:text-slate-600 rounded-lg text-xs font-semibold transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
+                        >
+                          Link
+                        </button>
+                      </div>
+                      {syncError && (
+                        <div className="flex items-start gap-1 text-rose-600 dark:text-rose-400 text-[11px] mt-1 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/50 rounded-md p-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                          <span>{syncError}</span>
+                        </div>
+                      )}
+                    </form>
+
+                    {/* Disconnect / Reset option */}
+                    <div className="pt-2 flex justify-between items-center text-[11px] border-t border-slate-200/65 dark:border-slate-800/80">
+                      {isDisconnecting ? (
+                        <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/50 p-1.5 rounded-md w-full justify-between animate-fade-in">
+                          <span className="text-rose-700 dark:text-rose-300 font-medium">Reset sync code?</span>
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              onClick={handleGenerateNewCode}
+                              className="px-2 py-0.5 bg-rose-600 text-white font-semibold rounded hover:bg-rose-700 transition-colors cursor-pointer"
+                            >
+                              Yes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsDisconnecting(false)}
+                              className="px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors cursor-pointer"
+                            >
+                              No
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="text-slate-400 dark:text-slate-500">Need a fresh start?</span>
+                          <button
+                            type="button"
+                            onClick={() => setIsDisconnecting(true)}
+                            className="flex items-center gap-1 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors font-medium cursor-pointer"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Disconnect Code
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Footer */}
+              <div className="px-6 py-4 bg-slate-50 dark:bg-slate-950/40 border-t border-slate-100 dark:border-slate-850 flex justify-end">
+                <button
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs sm:text-sm shadow-xs transition-colors cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      {/* Quick Cash Advance Modal */}
+      {longPressedDate && (
+        <QuickCashAdvanceModal
+          dateStr={longPressedDate}
+          cashAdvances={cashAdvances}
+          onClose={() => setLongPressedDate(null)}
+          onAddAdvance={handleAddAdvance}
+          onDeleteAdvance={handleDeleteAdvance}
+        />
+      )}
     </div>
   );
 };
