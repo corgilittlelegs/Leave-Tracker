@@ -17,8 +17,8 @@ export default defineConfig(({ mode }) => {
           registerType: 'autoUpdate',
           includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
           manifest: {
-            name: 'MaidPay Tracker',
-            short_name: 'MaidPay',
+            name: 'Aide Tracker',
+            short_name: 'Aide',
             description: 'Track leaves and salary advances for domestic help',
             theme_color: '#0f172a',
             background_color: '#0f172a',

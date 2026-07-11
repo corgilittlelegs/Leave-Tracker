@@ -236,10 +236,10 @@ export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b-2 border-slate-800 dark:border-slate-700 pb-4 gap-4">
               <div>
                 <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight uppercase">
-                  MaidPay Attendance & Salary Statement
+                  Aide Attendance & Salary Statement
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Generated via MaidPay • Secure Cloud Sync ID: <span className="font-mono text-indigo-600 dark:text-indigo-400 print:text-slate-800 font-bold">{syncCode || 'OFFLINE'}</span>
+                  Generated via Aide • Secure Cloud Sync ID: <span className="font-mono text-indigo-600 dark:text-indigo-400 print:text-slate-800 font-bold">{syncCode || 'OFFLINE'}</span>
                 </p>
               </div>
               <div className="bg-slate-900 dark:bg-slate-800 text-white px-4 py-2 rounded-lg text-center shrink-0 print:border print:border-slate-800 print:text-black print:bg-white">
@@ -438,7 +438,7 @@ export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
 
             {/* Bottom Footer watermark */}
             <p className="text-center text-[9px] text-slate-450 dark:text-slate-500 pt-8 italic print:pt-4">
-              * This is a computer-generated attendance ledger and pay statement managed via MaidPay.
+              * This is a computer-generated attendance ledger and pay statement managed via Aide.
             </p>
 
           </div>

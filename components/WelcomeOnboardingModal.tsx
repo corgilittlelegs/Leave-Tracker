@@ -109,7 +109,7 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
             <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl mb-3 border border-white/20 shadow-inner">
               <Sparkles className="w-8 h-8 text-amber-300 animate-pulse" />
             </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Welcome to MaidPay</h2>
+            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Welcome to Aide</h2>
             <p className="text-indigo-100 text-xs sm:text-sm mt-1.5 max-w-xs sm:max-w-md font-medium">
               Track attendance, calculate monthly salaries, and manage cash advances transparently.
             </p>

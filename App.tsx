@@ -94,6 +94,42 @@ const App: React.FC = () => {
     return !completed && !hasSyncCode;
   });
 
+  // --- PWA Installation State & Hooks ---
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstalled, setIsInstalled] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setDeferredPrompt(null);
+      setIsInstalled(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response to PWA install prompt: ${outcome}`);
+    setDeferredPrompt(null);
+  };
+
   const handleCompleteOnboarding = (salary: number, leaves: number) => {
     setBaseSalary(salary);
     setFreeAbsentsPerMonth(leaves);
@@ -485,7 +521,7 @@ const App: React.FC = () => {
                 <Calculator className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">MaidPay</h1>
+                <h1 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Aide</h1>
                 <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">Attendance & Salary Tracker</p>
               </div>
             </div>
@@ -908,6 +944,50 @@ const App: React.FC = () => {
                         </>
                       )}
                     </div>
+                  </div>
+                </div>
+
+                {/* 3. App Installation */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <Download className="w-4 h-4 text-indigo-500" />
+                    App Installation
+                  </h3>
+                  
+                  <div className="space-y-3 bg-slate-50/50 dark:bg-slate-900/25 border border-slate-150 dark:border-slate-800/80 rounded-xl p-4">
+                    {isInstalled ? (
+                      <div className="flex items-center gap-2.5 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 p-3 rounded-lg text-xs font-medium">
+                        <Check className="w-4 h-4 shrink-0" />
+                        <div>
+                          <p className="font-bold">Aide is installed!</p>
+                          <p className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 mt-0.5">Running in standalone app mode.</p>
+                        </div>
+                      </div>
+                    ) : deferredPrompt ? (
+                      <div className="space-y-2">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                          Install Aide on your device for quick access, offline support, and a full-screen experience.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleInstallClick}
+                          className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs sm:text-sm shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <Download className="w-4 h-4" />
+                          Install Aide App
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                          To install this app on your device:
+                        </p>
+                        <ul className="text-[11px] text-slate-550 dark:text-slate-400 space-y-1.5 list-disc pl-4">
+                          <li><strong>iOS / Safari:</strong> Tap the Share button and select <span className="font-semibold text-slate-700 dark:text-slate-300">"Add to Home Screen"</span>.</li>
+                          <li><strong>Chrome / Edge / Safari (Mac):</strong> Look for the Install icon in your address bar or browser menu.</li>
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
