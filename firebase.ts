@@ -1,6 +1,17 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
-import { AttendanceRecord, CashAdvance } from './types';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  updateDoc, 
+  deleteField, 
+  arrayUnion, 
+  arrayRemove, 
+  onSnapshot, 
+  serverTimestamp 
+} from 'firebase/firestore';
+import { AttendanceRecord, AttendanceStatus, CashAdvance } from './types';
 
 // Load configuration from the auto-provisioned file
 import firebaseConfig from './firebase-applet-config.json';
@@ -26,7 +37,7 @@ export function generateSyncCode(): string {
   return `MP-${part1}-${part2}`;
 }
 
-// Saves/updates tracker data to Firestore
+// Saves/updates tracker data to Firestore (used for initialization)
 export async function saveTrackerData(syncCode: string, data: Partial<TrackerData>) {
   if (!syncCode) return;
   const docRef = doc(db, 'trackers', syncCode.toUpperCase().trim());
@@ -37,6 +48,70 @@ export async function saveTrackerData(syncCode: string, data: Partial<TrackerDat
     }, { merge: true });
   } catch (error) {
     console.error('Error saving tracker data to Firestore:', error);
+  }
+}
+
+// Granularly updates a single date's attendance status to prevent concurrency issues
+export async function updateSingleAttendance(syncCode: string, dateStr: string, status: AttendanceStatus) {
+  if (!syncCode) return;
+  const docRef = doc(db, 'trackers', syncCode.toUpperCase().trim());
+  try {
+    if (status === 'UNMARKED') {
+      await updateDoc(docRef, {
+        [`attendance.${dateStr}`]: deleteField(),
+        updatedAt: serverTimestamp()
+      });
+    } else {
+      await updateDoc(docRef, {
+        [`attendance.${dateStr}`]: status,
+        updatedAt: serverTimestamp()
+      });
+    }
+  } catch (error) {
+    console.error('Error updating attendance in Firestore:', error);
+  }
+}
+
+// Appends a cash advance using arrayUnion
+export async function addCashAdvance(syncCode: string, advance: CashAdvance) {
+  if (!syncCode) return;
+  const docRef = doc(db, 'trackers', syncCode.toUpperCase().trim());
+  try {
+    await updateDoc(docRef, {
+      cashAdvances: arrayUnion(advance),
+      updatedAt: serverTimestamp()
+    });
+  } catch (error) {
+    console.error('Error adding cash advance in Firestore:', error);
+  }
+}
+
+// Removes a specific cash advance using arrayRemove
+export async function deleteCashAdvance(syncCode: string, advance: CashAdvance) {
+  if (!syncCode) return;
+  const docRef = doc(db, 'trackers', syncCode.toUpperCase().trim());
+  try {
+    await updateDoc(docRef, {
+      cashAdvances: arrayRemove(advance),
+      updatedAt: serverTimestamp()
+    });
+  } catch (error) {
+    console.error('Error deleting cash advance in Firestore:', error);
+  }
+}
+
+// Updates tracker configuration (salary & leave policy)
+export async function updateConfig(syncCode: string, baseSalary: number, freeAbsentsPerMonth: number) {
+  if (!syncCode) return;
+  const docRef = doc(db, 'trackers', syncCode.toUpperCase().trim());
+  try {
+    await updateDoc(docRef, {
+      baseSalary,
+      freeAbsentsPerMonth,
+      updatedAt: serverTimestamp()
+    });
+  } catch (error) {
+    console.error('Error updating settings in Firestore:', error);
   }
 }
 

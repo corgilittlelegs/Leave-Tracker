@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MaidPay Tracker</title>
+    <script>
+      (function() {
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (savedTheme === 'dark' || (!savedTheme && (prefersDark))) {
+          document.documentElement.classList.add('dark');
+          document.body?.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+          document.body?.classList.remove('dark');
+        }
+      })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -27,8 +40,7 @@
     "react-dom/": "https://esm.sh/react-dom@^19.2.1/",
     "lucide-react": "https://esm.sh/lucide-react@^0.559.0",
     "react/": "https://esm.sh/react@^19.2.1/",
-    "react": "https://esm.sh/react@^19.2.1",
-    "recharts": "https://esm.sh/recharts@^3.5.1"
+    "react": "https://esm.sh/react@^19.2.1"
   }
 }
 </script>

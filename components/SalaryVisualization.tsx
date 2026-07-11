@@ -23,7 +23,7 @@ export const SalaryVisualization: React.FC<SalaryVisualizationProps> = ({ stats,
   const remainingPct = (remainingDays / totalDays) * 100;
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700/50 p-5 space-y-4">
+    <div className="backdrop-blur-md bg-white/70 dark:bg-slate-900/60 rounded-xl shadow-xs border border-slate-200/50 dark:border-slate-800/40 p-4 sm:p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-slate-800 dark:text-white">Monthly Overview</h3>
         <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider">

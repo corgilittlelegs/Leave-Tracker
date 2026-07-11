@@ -9,6 +9,7 @@ interface MonthlySummaryModalProps {
   currentDate: Date;
   attendance: AttendanceRecord;
   stats: MonthStats;
+  baseSalary: number;
   cashAdvances: CashAdvance[];
   totalMonthlyCashAdvances: number;
   netPayable: number;
@@ -22,6 +23,7 @@ export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
   currentDate,
   attendance,
   stats,
+  baseSalary,
   cashAdvances,
   totalMonthlyCashAdvances,
   netPayable,

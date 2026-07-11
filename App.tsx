@@ -7,7 +7,8 @@ import { CashAdvances } from './components/CashAdvances';
 import { MonthlySummaryModal } from './components/MonthlySummaryModal';
 import { AttendanceRecord, AttendanceStatus, MonthStats, CashAdvance } from './types';
 import { BASE_SALARY, FREE_ABSENTS_PER_MONTH, MONTH_NAMES } from './constants';
-import { generateSyncCode, saveTrackerData, subscribeToTracker, checkSyncCodeExists } from './firebase';
+import { generateSyncCode, saveTrackerData, subscribeToTracker, checkSyncCodeExists, updateSingleAttendance, addCashAdvance, deleteCashAdvance, updateConfig } from './firebase';
+import { calculateMonthStats } from './utils';
 
 const App: React.FC = () => {
   // --- Dark Mode State ---
@@ -79,6 +80,8 @@ const App: React.FC = () => {
   const [copied, setCopied] = useState<boolean>(false);
   const [linkInput, setLinkInput] = useState<string>('');
   const [isDisconnecting, setIsDisconnecting] = useState<boolean>(false);
+  const [salaryError, setSalaryError] = useState<string | null>(null);
+  const [leavesError, setLeavesError] = useState<string | null>(null);
 
   // 1. Initial Local Storage Cache loading
   useEffect(() => {
@@ -195,34 +198,43 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, [syncCode]);
 
-  // 5. Save local state updates back to Firestore
+  // 5. Save settings configurations back to Firestore (debounced to avoid constant writing)
   useEffect(() => {
     if (!isSyncReady || !syncCode) return;
 
     const timer = setTimeout(() => {
-      saveTrackerData(syncCode, {
-        attendance,
-        baseSalary,
-        freeAbsentsPerMonth,
-        cashAdvances
-      });
-    }, 400); // 400ms debounce to prevent constant writing
+      updateConfig(syncCode, baseSalary, freeAbsentsPerMonth);
+    }, 500);
 
     return () => clearTimeout(timer);
-  }, [attendance, baseSalary, freeAbsentsPerMonth, cashAdvances, isSyncReady, syncCode]);
+  }, [baseSalary, freeAbsentsPerMonth, isSyncReady, syncCode]);
 
   const handleSalaryInputChange = (val: string) => {
     setSalaryInput(val);
+    if (val.trim() === '') {
+      setSalaryError('Salary cannot be empty.');
+      return;
+    }
     const num = parseInt(val, 10);
-    if (!isNaN(num) && num >= 0) {
+    if (isNaN(num) || num < 0 || String(num) !== val.trim()) {
+      setSalaryError('Please enter a valid positive integer.');
+    } else {
+      setSalaryError(null);
       setBaseSalary(num);
     }
   };
 
   const handleLeavesInputChange = (val: string) => {
     setLeavesInput(val);
+    if (val.trim() === '') {
+      setLeavesError('Leaves count cannot be empty.');
+      return;
+    }
     const num = parseInt(val, 10);
-    if (!isNaN(num) && num >= 0) {
+    if (isNaN(num) || num < 0 || String(num) !== val.trim()) {
+      setLeavesError('Please enter a valid positive integer.');
+    } else {
+      setLeavesError(null);
       setFreeAbsentsPerMonth(num);
     }
   };
@@ -281,10 +293,18 @@ const App: React.FC = () => {
       description
     };
     setCashAdvances(prev => [...prev, newAdvance]);
+    if (isSyncReady && syncCode) {
+      addCashAdvance(syncCode, newAdvance);
+    }
   };
 
   const handleDeleteAdvance = (id: string) => {
+    const targetAdvance = cashAdvances.find(adv => adv.id === id);
+    if (!targetAdvance) return;
     setCashAdvances(prev => prev.filter(adv => adv.id !== id));
+    if (isSyncReady && syncCode) {
+      deleteCashAdvance(syncCode, targetAdvance);
+    }
   };
 
   // --- Handlers ---
@@ -298,16 +318,14 @@ const App: React.FC = () => {
 
   const toggleAttendance = (dateStr: string) => {
     if (isPastMonth) return;
+    
+    const current = attendance[dateStr] || 'UNMARKED';
+    let next: AttendanceStatus = 'UNMARKED';
+    if (current === 'UNMARKED') next = 'ABSENT';
+    else if (current === 'ABSENT') next = 'PRESENT';
+    else if (current === 'PRESENT') next = 'UNMARKED';
+
     setAttendance(prev => {
-      const current = prev[dateStr] || 'UNMARKED';
-      let next: AttendanceStatus = 'UNMARKED';
-
-      // Requested change: display absent first
-      // Cycle: UNMARKED -> ABSENT -> PRESENT -> UNMARKED
-      if (current === 'UNMARKED') next = 'ABSENT';
-      else if (current === 'ABSENT') next = 'PRESENT';
-      else if (current === 'PRESENT') next = 'UNMARKED';
-
       const newData = { ...prev };
       if (next === 'UNMARKED') {
         delete newData[dateStr];
@@ -316,6 +334,10 @@ const App: React.FC = () => {
       }
       return newData;
     });
+
+    if (isSyncReady && syncCode) {
+      updateSingleAttendance(syncCode, dateStr, next);
+    }
   };
 
   const downloadCSV = (period: 'month' | 'year') => {
@@ -379,58 +401,8 @@ const App: React.FC = () => {
 
   // --- Calculations ---
   const stats: MonthStats = useMemo(() => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const totalDays = new Date(year, month + 1, 0).getDate();
-    
-    // Per day rate logic: Based on *current* active month total days
-    const dailyRate = baseSalary / totalDays;
-
-    let daysWorked = 0;
-    let absentDays = 0;
-    
-    // Normalize today to start of day for comparison
-    const comparisonToday = new Date(actualToday);
-    comparisonToday.setHours(0, 0, 0, 0);
-
-    // Iterate through all days of the specific month to count status
-    for (let i = 1; i <= totalDays; i++) {
-      const dStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-      const dDate = new Date(year, month, i);
-      const status = attendance[dStr];
-      
-      const isPastOrToday = dDate <= comparisonToday;
-
-      if (isPastOrToday) {
-         // Logic: Assume present up to current date unless marked absent
-         if (status === 'ABSENT') {
-            absentDays++;
-         } else {
-            // Either explicitly PRESENT or Implicitly PRESENT (Unmarked)
-            daysWorked++;
-         }
-      } else {
-         // Future days: Only count if explicitly marked
-         if (status === 'PRESENT') daysWorked++;
-         if (status === 'ABSENT') absentDays++;
-      }
-    }
-    
-    const paidLeaveDays = Math.min(absentDays, freeAbsentsPerMonth);
-    const payableDays = daysWorked + paidLeaveDays;
-    
-    const finalSalary = payableDays * dailyRate;
-    const deductibleAbsents = Math.max(0, absentDays - freeAbsentsPerMonth);
-
-    return {
-      totalDays,
-      daysWorked,
-      absentDays,
-      deductibleAbsents,
-      dailyRate,
-      finalSalary
-    };
-  }, [currentDate, attendance, actualToday, baseSalary, freeAbsentsPerMonth]);
+    return calculateMonthStats(currentDate, attendance, baseSalary, freeAbsentsPerMonth, actualToday);
+  }, [currentDate, attendance, baseSalary, freeAbsentsPerMonth, actualToday]);
 
   // --- Cash Advance Calculations ---
   const totalMonthlyCashAdvances = useMemo(() => {
@@ -487,35 +459,35 @@ const App: React.FC = () => {
         {/* Header Stats Section */}
         <div>
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-white">
+                <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-white tracking-tight">
                     Dashboard for {MONTH_NAMES[currentDate.getMonth()]} {currentDate.getFullYear()}
                 </h2>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-row flex-wrap sm:flex-nowrap gap-2 w-full md:w-auto items-stretch justify-start">
                     <button 
                       onClick={() => setIsSummaryOpen(true)}
-                      className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm cursor-pointer"
+                      className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs sm:text-sm font-semibold transition-all hover:scale-[1.02] shadow-xs cursor-pointer"
                     >
                         <FileText className="w-4 h-4" />
-                        Print Summary Slip
+                        <span>Print Slip</span>
                     </button>
                     <button 
                       onClick={() => downloadCSV('month')}
-                      className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-white transition-colors shadow-sm cursor-pointer"
+                      className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-white transition-all hover:scale-[1.02] shadow-xs cursor-pointer"
                     >
                         <Download className="w-4 h-4" />
-                        Export Month
+                        <span>Export Month</span>
                     </button>
                     <button 
                       onClick={() => downloadCSV('year')}
-                      className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-white transition-colors shadow-sm cursor-pointer"
+                      className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-white transition-all hover:scale-[1.02] shadow-xs cursor-pointer"
                     >
                         <Download className="w-4 h-4" />
-                        Export Year
+                        <span>Export Year</span>
                     </button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <StatCard 
                 label="Accrued Salary" 
                 value={`₹${Math.round(stats.finalSalary).toLocaleString()}`} 
@@ -584,8 +556,7 @@ const App: React.FC = () => {
                    <Sliders className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                    Salary & Policy Configuration
                 </h3>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                   <div>
                     <label htmlFor="base-salary-input" className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                       Monthly Base Salary (₹)
@@ -598,12 +569,15 @@ const App: React.FC = () => {
                         type="text"
                         name="base-salary"
                         id="base-salary-input"
-                        className="block w-full rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 pl-7 pr-3 py-2 text-slate-800 dark:text-white placeholder:text-slate-450 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 sm:text-sm outline-none transition-all text-sm font-medium"
+                        className={`block w-full rounded-lg bg-white dark:bg-slate-900 border pl-7 pr-3 py-2 text-slate-800 dark:text-white placeholder:text-slate-400 focus:ring-1 sm:text-sm outline-none transition-all text-sm font-medium ${salaryError ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500' : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500'}`}
                         placeholder="e.g. 1300"
                         value={salaryInput}
                         onChange={(e) => handleSalaryInputChange(e.target.value)}
                       />
                     </div>
+                    {salaryError && (
+                      <p className="text-[11px] text-rose-500 mt-1 font-medium">{salaryError}</p>
+                    )}
                   </div>
 
                   <div>
@@ -614,11 +588,14 @@ const App: React.FC = () => {
                       type="text"
                       name="free-leaves"
                       id="free-leaves-input"
-                      className="block w-full rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 text-slate-800 dark:text-white placeholder:text-slate-455 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 sm:text-sm outline-none transition-all text-sm font-medium"
+                      className={`block w-full rounded-lg bg-white dark:bg-slate-900 border px-3 py-2 text-slate-800 dark:text-white placeholder:text-slate-400 focus:ring-1 sm:text-sm outline-none transition-all text-sm font-medium ${leavesError ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500' : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500'}`}
                       placeholder="e.g. 2"
                       value={leavesInput}
                       onChange={(e) => handleLeavesInputChange(e.target.value)}
                     />
+                    {leavesError && (
+                      <p className="text-[11px] text-rose-500 mt-1 font-medium">{leavesError}</p>
+                    )}
                   </div>
                 </div>
 
@@ -753,6 +730,7 @@ const App: React.FC = () => {
             <CashAdvances
               cashAdvances={cashAdvances}
               currentDate={currentDate}
+              baseSalary={baseSalary}
               onAddAdvance={handleAddAdvance}
               onDeleteAdvance={handleDeleteAdvance}
             />
@@ -810,6 +788,7 @@ const App: React.FC = () => {
         currentDate={currentDate}
         attendance={attendance}
         stats={stats}
+        baseSalary={baseSalary}
         cashAdvances={cashAdvances}
         totalMonthlyCashAdvances={totalMonthlyCashAdvances}
         netPayable={netPayable}

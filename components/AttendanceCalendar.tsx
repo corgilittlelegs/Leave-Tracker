@@ -36,12 +36,12 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
     switch (status) {
       case 'PRESENT':
         return isImplicit 
-          ? `bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900/50 ${isReadOnly ? '' : 'hover:bg-emerald-200 dark:hover:bg-emerald-950/60'}` // Implicit look
-          : `bg-emerald-500 dark:bg-emerald-600 text-white border-emerald-600 dark:border-emerald-700 ${isReadOnly ? '' : 'hover:bg-emerald-600 dark:hover:bg-emerald-500'}`; // Explicit look
+          ? `bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 dark:border-emerald-500/10 ${isReadOnly ? '' : 'hover:bg-emerald-500/20 dark:hover:bg-emerald-500/25'}` // Implicit look
+          : `bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-transparent shadow-xs ${isReadOnly ? '' : 'hover:brightness-110'}`; // Explicit look
       case 'ABSENT':
-        return `bg-rose-500 dark:bg-rose-600 text-white border-rose-600 dark:border-rose-700 ${isReadOnly ? '' : 'hover:bg-rose-600 dark:hover:bg-rose-500'}`;
+        return `bg-gradient-to-br from-rose-500 to-red-600 text-white border-transparent shadow-xs ${isReadOnly ? '' : 'hover:brightness-110'}`;
       default:
-        return `bg-slate-50 dark:bg-slate-800/30 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700/50 ${isReadOnly ? '' : 'hover:bg-slate-100 dark:hover:bg-slate-800/50'}`;
+        return `bg-slate-50/50 dark:bg-slate-900/30 text-slate-500 dark:text-slate-450 border-slate-200/50 dark:border-slate-800/40 ${isReadOnly ? '' : 'hover:bg-slate-100 dark:hover:bg-slate-850/50'}`;
     }
   };
 
@@ -58,7 +58,7 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
     
     // Empty cells for days before start of month
     for (let i = 0; i < firstDayOfMonth; i++) {
-      days.push(<div key={`empty-${i}`} className="h-10 sm:h-14"></div>);
+      days.push(<div key={`empty-${i}`} className="h-11 sm:h-14"></div>);
     }
 
     // Actual days
@@ -82,22 +82,41 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
 
       const isToday = new Date().toDateString() === dayDate.toDateString();
 
+      const getAriaLabel = () => {
+        const dateStrLong = dayDate.toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric'
+        });
+        let statusStr = 'Unmarked';
+        if (displayStatus === 'PRESENT') {
+          statusStr = isImplicit ? 'Present (Auto-marked)' : 'Present (Marked)';
+        } else if (displayStatus === 'ABSENT') {
+          statusStr = 'Absent';
+        }
+        const actionStr = isReadOnly ? 'read only' : 'tap to toggle status';
+        const todayLabel = isToday ? 'Today, ' : '';
+        return `${todayLabel}${dateStrLong}: ${statusStr}, ${actionStr}`;
+      };
+
       days.push(
         <button
           key={dateStr}
           onClick={() => !isReadOnly && onDateClick(dateStr)}
           disabled={isReadOnly}
+          aria-label={getAriaLabel()}
           className={`
-            relative h-10 sm:h-14 rounded-lg border text-sm sm:text-base font-medium transition-all
-            flex items-center justify-center flex-col
+            relative h-11 sm:h-14 rounded-lg border text-sm sm:text-base font-semibold transition-all duration-200
+            flex items-center justify-center flex-col shadow-2xs
             ${getStatusColor(displayStatus, isImplicit)}
-            ${isToday ? 'ring-2 ring-indigo-400 dark:ring-indigo-500 ring-offset-2 dark:ring-offset-slate-900' : ''}
-            ${isReadOnly ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'}
+            ${isToday ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 ring-offset-2 dark:ring-offset-slate-900 shadow-md scale-[1.02]' : ''}
+            ${isReadOnly ? 'cursor-not-allowed opacity-90' : 'cursor-pointer hover:scale-[1.04] active:scale-95'}
           `}
         >
           <span>{day}</span>
           {displayStatus !== 'UNMARKED' && (
-            <span className={`text-[10px] uppercase font-bold mt-[-2px] sm:mt-0 ${isImplicit ? 'opacity-60' : 'opacity-80'}`}>
+            <span className={`text-[9px] sm:text-[10px] uppercase font-bold mt-[-2px] sm:mt-0 ${isImplicit ? 'opacity-60' : 'opacity-80'}`} aria-hidden="true">
               {getStatusLabel(displayStatus, isImplicit)}
             </span>
           )}
@@ -120,10 +139,10 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
           )}
         </h2>
         <div className="flex space-x-2">
-          <button onClick={onPrevMonth} className="p-2 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-transparent hover:border-slate-200 dark:hover:border-slate-600 transition-colors cursor-pointer">
+          <button onClick={onPrevMonth} aria-label="Previous Month" className="p-2 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-transparent hover:border-slate-200 dark:hover:border-slate-600 transition-colors cursor-pointer">
             <ChevronLeft className="w-5 h-5 text-slate-600 dark:text-slate-300" />
           </button>
-          <button onClick={onNextMonth} className="p-2 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-transparent hover:border-slate-200 dark:hover:border-slate-600 transition-colors cursor-pointer">
+          <button onClick={onNextMonth} aria-label="Next Month" className="p-2 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-transparent hover:border-slate-200 dark:hover:border-slate-600 transition-colors cursor-pointer">
             <ChevronRight className="w-5 h-5 text-slate-600 dark:text-slate-300" />
           </button>
         </div>
