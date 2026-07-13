@@ -1,3 +1,4 @@
+export const APP_VERSION = process.env.APP_VERSION || "1.0.0";
 export const BASE_SALARY = 12345;
 export const FREE_ABSENTS_PER_MONTH = 6;
 

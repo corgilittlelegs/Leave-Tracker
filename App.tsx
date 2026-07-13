@@ -6,8 +6,9 @@ import { SalaryVisualization } from './components/SalaryVisualization';
 import { MonthlySummaryModal } from './components/MonthlySummaryModal';
 import { QuickCashAdvanceModal } from './components/QuickCashAdvanceModal';
 import { WelcomeOnboardingModal } from './components/WelcomeOnboardingModal';
+import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { AttendanceRecord, AttendanceStatus, MonthStats, CashAdvance } from './types';
-import { BASE_SALARY, FREE_ABSENTS_PER_MONTH, MONTH_NAMES } from './constants';
+import { APP_VERSION, BASE_SALARY, FREE_ABSENTS_PER_MONTH, MONTH_NAMES } from './constants';
 import { generateSyncCode, saveTrackerData, subscribeToTracker, checkSyncCodeExists, updateSingleAttendance, addCashAdvance, deleteCashAdvance, updateConfig } from './firebase';
 import { calculateMonthStats } from './utils';
 
@@ -774,7 +775,12 @@ const App: React.FC = () => {
               <div className="px-6 py-5 bg-slate-50 dark:bg-slate-950/40 border-b border-slate-100 dark:border-slate-850 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Settings className="w-5 h-5 text-indigo-600 dark:text-indigo-400 animate-[spin_4s_linear_infinite]" />
-                  <h2 className="text-lg font-bold text-slate-800 dark:text-white">Configurations & Sync</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-slate-800 dark:text-white">Configurations & Sync</h2>
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 rounded-md">
+                      v{APP_VERSION}
+                    </span>
+                  </div>
                 </div>
                 <button
                   onClick={() => setIsSettingsOpen(false)}
@@ -1026,6 +1032,9 @@ const App: React.FC = () => {
           onDeleteAdvance={handleDeleteAdvance}
         />
       )}
+
+      {/* PWA Update Prompt */}
+      <PWAUpdatePrompt />
     </div>
   );
 };

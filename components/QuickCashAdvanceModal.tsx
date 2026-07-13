@@ -20,6 +20,14 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
   const [amount, setAmount] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [isClosing, setIsClosing] = useState<boolean>(false);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+    }, 200); // match 0.2s duration of fade-out / zoom-out
+  };
 
   // Format YYYY-MM-DD to readable date
   const readableDate = useMemo(() => {
@@ -58,16 +66,16 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
     // We don't automatically close so the user can see it added or add another, but let's close it or keep it open.
     // Usually, closing on success is best, but keeping it open so they see "existing advances" update is also cool.
     // Let's close it so the flow is quick and simple!
-    onClose();
+    handleClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto animate-fade-in">
+    <div className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}>
       {/* Backdrop click close */}
-      <div className="fixed inset-0" onClick={onClose}></div>
+      <div className="fixed inset-0" onClick={handleClose}></div>
 
       {/* Modal Container */}
-      <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden flex flex-col z-10 animate-zoom-in">
+      <div className={`relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden flex flex-col z-10 ${isClosing ? 'animate-zoom-out' : 'animate-zoom-in'}`}>
         
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40">
@@ -81,7 +89,7 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-850 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -177,7 +185,7 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
             <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="px-4 py-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
               >
                 Cancel
