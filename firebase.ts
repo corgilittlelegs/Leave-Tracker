@@ -26,6 +26,7 @@ export interface TrackerData {
   baseSalary: number;
   freeAbsentsPerMonth: number;
   cashAdvances?: CashAdvance[];
+  settlements?: { [monthStr: string]: number };
   updatedAt?: any;
 }
 

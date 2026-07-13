@@ -9,6 +9,7 @@ export interface CashAdvance {
   amount: number;
   date: string; // YYYY-MM-DD
   description: string;
+  type?: 'ADVANCE' | 'PAYOUT';
 }
 
 export interface MonthStats {

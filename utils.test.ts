@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateMonthStats } from './utils';
+import { calculateMonthStats, calculateBalancesChain } from './utils';
 import { AttendanceRecord } from './types';
 
 describe('calculateMonthStats', () => {
@@ -75,5 +75,71 @@ describe('calculateMonthStats', () => {
     const stats = calculateMonthStats(july2026, {}, 0, freeAbsents, actualToday);
     expect(stats.dailyRate).toBe(0);
     expect(stats.finalSalary).toBe(0);
+  });
+});
+
+describe('calculateBalancesChain', () => {
+  const baseSalary = 30000;
+  const freeAbsents = 2;
+  const actualToday = new Date(2026, 6, 15); // July 15, 2026
+
+  it('returns 0 values if there is no historical data', () => {
+    const targetDate = new Date(2026, 6, 1); // July 2026
+    const res = calculateBalancesChain(targetDate, {}, [], {}, baseSalary, freeAbsents, actualToday);
+    
+    expect(res.outstandingBalance).toBe(0);
+    expect(res.currentMonthPayouts).toBe(0);
+    expect(res.unsettledMonths).toEqual([]);
+  });
+
+  it('calculates outstanding balances correctly across multiple months', () => {
+    // Let's create history: May and June 2026.
+    // In May, worker earned 30000 (auto-present). Cash advance was 2000. Net due = 28000.
+    // May is unsettled (no entry in settlements). So 28000 carries forward to June.
+    // In June, worker earned 30000 (auto-present). Cash advance was 1000.
+    // Also, there was a payout in June of 5000 (paying off part of May's balance).
+    // Total due at end of June = 30000 (June earned) - 1000 (June advance) + 28000 (May outstanding) - 5000 (June payout) = 52000.
+    // Let's say June is settled with a payment of 40000 (e.g. settlements['2026-06'] = 40000).
+    // Carried over to July should be: 52000 - 40000 = 12000.
+    //
+    // Also, during July, there is a payout of 4000.
+    
+    const attendance: AttendanceRecord = {};
+    const cashAdvances = [
+      { id: '1', amount: 2000, date: '2026-05-10', description: 'May advance', type: 'ADVANCE' as const },
+      { id: '2', amount: 1000, date: '2026-06-05', description: 'June advance', type: 'ADVANCE' as const },
+      { id: '3', amount: 5000, date: '2026-06-12', description: 'Part payout of May', type: 'PAYOUT' as const },
+      { id: '4', amount: 4000, date: '2026-07-04', description: 'July payout', type: 'PAYOUT' as const }
+    ];
+
+    const settlements = {
+      '2026-06': 40000 // settled June with 40000. May '2026-05' is unsettled.
+    };
+
+    const targetDate = new Date(2026, 6, 1); // July 2026
+    const res = calculateBalancesChain(targetDate, attendance, cashAdvances, settlements, baseSalary, freeAbsents, actualToday);
+
+    // May (2026-05):
+    // Days in May: 31.
+    // Earned: 30000. Advances: 2000. Payouts: 0. Running: 0.
+    // Due: 28000.
+    // Settled: Unsettled. Running outstanding carries forward = 28000.
+    // Unsettled list contains: '2026-05'
+    //
+    // June (2026-06):
+    // Days in June: 30.
+    // Earned: 30000. Advances: 1000. Payouts: 5000.
+    // Due: 30000 - 1000 + 28000 - 5000 = 52000.
+    // Settled: 40000.
+    // Carries forward to July = 52000 - 40000 = 12000.
+    //
+    // July target:
+    // outstandingBalance = 12000.
+    // currentMonthPayouts = 4000.
+    // unsettledMonths = ['2026-05']
+
+    expect(res.outstandingBalance).toBe(12000);
+    expect(res.currentMonthPayouts).toBe(4000);
+    expect(res.unsettledMonths).toEqual(['2026-05']);
   });
 });

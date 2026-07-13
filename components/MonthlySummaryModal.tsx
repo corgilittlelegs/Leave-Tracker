@@ -15,6 +15,8 @@ interface MonthlySummaryModalProps {
   netPayable: number;
   freeAbsentsPerMonth: number;
   syncCode: string | null;
+  outstandingBalance: number;
+  currentMonthPayouts: number;
 }
 
 export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
@@ -29,6 +31,8 @@ export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
   netPayable,
   freeAbsentsPerMonth,
   syncCode,
+  outstandingBalance,
+  currentMonthPayouts,
 }) => {
   const [maidName, setMaidName] = useState<string>('');
   const [employerName, setEmployerName] = useState<string>('');
@@ -310,7 +314,7 @@ export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
                         -₹{Math.round(stats.deductibleAbsents * stats.dailyRate).toLocaleString()}
                       </td>
                     </tr>
-                    <tr className="bg-slate-50/50 dark:bg-slate-900/30 print:bg-white font-semibold text-slate-800 dark:text-slate-200">
+                     <tr className="bg-slate-50/50 dark:bg-slate-900/30 print:bg-white font-semibold text-slate-800 dark:text-slate-200">
                       <td className="py-2.5 px-3">Gross Accrued Pay</td>
                       <td className="py-2.5 px-3 text-right text-slate-500">Payable Days: {stats.daysWorked + Math.min(stats.absentDays, freeAbsentsPerMonth)}</td>
                       <td className="py-2.5 px-3 text-right font-bold text-slate-800 dark:text-slate-100">₹{Math.round(stats.finalSalary).toLocaleString()}</td>
@@ -320,6 +324,20 @@ export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
                       <td className="py-2.5 px-3 text-right">In-month advances requested</td>
                       <td className="py-2.5 px-3 text-right font-bold">-₹{totalMonthlyCashAdvances.toLocaleString()}</td>
                     </tr>
+                    {outstandingBalance > 0 && (
+                      <tr className="text-indigo-700 dark:text-indigo-400 bg-indigo-50/20 dark:bg-indigo-950/20 print:bg-white font-semibold">
+                        <td className="py-2.5 px-3">Previous Outstanding Balance</td>
+                        <td className="py-2.5 px-3 text-right">Unpaid balance from past months</td>
+                        <td className="py-2.5 px-3 text-right font-bold">+₹{outstandingBalance.toLocaleString()}</td>
+                      </tr>
+                    )}
+                    {currentMonthPayouts > 0 && (
+                      <tr className="text-emerald-700 dark:text-emerald-400 bg-emerald-50/20 dark:bg-emerald-950/20 print:bg-white font-semibold">
+                        <td className="py-2.5 px-3">Less: Outstanding Balance Paid</td>
+                        <td className="py-2.5 px-3 text-right">Payments made against past balance</td>
+                        <td className="py-2.5 px-3 text-right font-bold">-₹{currentMonthPayouts.toLocaleString()}</td>
+                      </tr>
+                    )}
                     <tr className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-100 font-extrabold text-sm border-t-2 border-emerald-600 dark:border-emerald-500 print:bg-white">
                       <td className="py-3 px-3">Net Due Amount Payable</td>
                       <td className="py-3 px-3 text-right uppercase text-[10px] tracking-wider text-emerald-800 dark:text-emerald-400">Final Take-Home</td>
@@ -348,14 +366,21 @@ export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-600 dark:text-slate-400">
-                      {activeMonthAdvances.map((adv) => {
+                       {activeMonthAdvances.map((adv) => {
                         const parts = adv.date.split('-');
                         const formatted = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
                           .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                         return (
                           <tr key={adv.id}>
                             <td className="py-2 px-3 font-mono text-slate-500 dark:text-slate-500">{formatted}</td>
-                            <td className="py-2 px-3 text-slate-800 dark:text-slate-200">{adv.description || 'Cash Advance'}</td>
+                            <td className="py-2 px-3 text-slate-800 dark:text-slate-200">
+                              <span>{adv.description || (adv.type === 'PAYOUT' ? 'Outstanding Balance Payout' : 'Cash Advance')}</span>
+                              {adv.type === 'PAYOUT' && (
+                                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-350 print:border print:border-emerald-500">
+                                  Payout
+                                </span>
+                              )}
+                            </td>
                             <td className="py-2 px-3 text-right font-bold text-slate-700 dark:text-slate-200">₹{adv.amount.toLocaleString()}</td>
                           </tr>
                         );

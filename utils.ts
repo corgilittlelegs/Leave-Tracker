@@ -1,4 +1,4 @@
-import { AttendanceRecord, MonthStats } from './types';
+import { AttendanceRecord, MonthStats, CashAdvance } from './types';
 
 /**
  * Calculates attendance and salary statistics for a specific month.
@@ -66,5 +66,128 @@ export function calculateMonthStats(
     deductibleAbsents,
     dailyRate,
     finalSalary
+  };
+}
+
+/**
+ * Calculates outstanding balances carried forward, target month's payouts,
+ * and identifies any unsettled past months.
+ */
+export function calculateBalancesChain(
+  targetDate: Date,
+  attendance: AttendanceRecord,
+  cashAdvances: CashAdvance[],
+  settlements: { [monthStr: string]: number } | undefined,
+  baseSalary: number,
+  freeAbsentsPerMonth: number,
+  actualToday: Date
+): {
+  outstandingBalance: number; // Carried over into the target month
+  currentMonthPayouts: number; // Total PAYOUT transactions recorded in target month
+  unsettledMonths: string[]; // List of YYYY-MM keys of all past months that are unsettled
+} {
+  const targetYear = targetDate.getFullYear();
+  const targetMonth = targetDate.getMonth(); // 0-indexed
+
+  // 1. Gather all months that have data (either in attendance or cash advances)
+  // as well as any month in settlements
+  const allMonthKeysSet = new Set<string>();
+  
+  Object.keys(attendance).forEach(dateStr => {
+    // dateStr is YYYY-MM-DD
+    const parts = dateStr.split('-');
+    if (parts.length >= 2) {
+      allMonthKeysSet.add(`${parts[0]}-${parts[1]}`);
+    }
+  });
+
+  cashAdvances.forEach(adv => {
+    const parts = adv.date.split('-');
+    if (parts.length >= 2) {
+      allMonthKeysSet.add(`${parts[0]}-${parts[1]}`);
+    }
+  });
+
+  if (settlements) {
+    Object.keys(settlements).forEach(monthKey => {
+      allMonthKeysSet.add(monthKey);
+    });
+  }
+
+  const allMonths = Array.from(allMonthKeysSet).sort();
+  if (allMonths.length === 0) {
+    return {
+      outstandingBalance: 0,
+      currentMonthPayouts: 0,
+      unsettledMonths: []
+    };
+  }
+
+  // Also add all months from the start of the earliest month found up to targetMonth
+  const [firstYear, firstMonth] = allMonths[0].split('-').map(Number);
+  let tempDate = new Date(firstYear, firstMonth - 1, 1);
+  const stopDate = new Date(targetYear, targetMonth, 1);
+  while (tempDate < stopDate) {
+    const yr = tempDate.getFullYear();
+    const mth = String(tempDate.getMonth() + 1).padStart(2, '0');
+    allMonthKeysSet.add(`${yr}-${mth}`);
+    tempDate.setMonth(tempDate.getMonth() + 1);
+  }
+
+  // Sort chronologically
+  const chronologicalMonths = Array.from(allMonthKeysSet).sort();
+
+  let runningOutstanding = 0;
+  const unsettledMonths: string[] = [];
+  let currentMonthPayouts = 0;
+
+  const targetMonthStr = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}`;
+
+  for (const monthStr of chronologicalMonths) {
+    const [year, month1Indexed] = monthStr.split('-').map(Number);
+    const month0Indexed = month1Indexed - 1;
+    const currentLoopDate = new Date(year, month0Indexed, 1);
+
+    // Sum payouts and advances for this month loop
+    const monthAdvances = cashAdvances.filter(adv => adv.date.startsWith(monthStr));
+    const totalAdvances = monthAdvances
+      .filter(adv => !adv.type || adv.type === 'ADVANCE')
+      .reduce((sum, adv) => sum + adv.amount, 0);
+    const totalPayouts = monthAdvances
+      .filter(adv => adv.type === 'PAYOUT')
+      .reduce((sum, adv) => sum + adv.amount, 0);
+
+    if (monthStr === targetMonthStr) {
+      currentMonthPayouts = totalPayouts;
+      // We do not add the target month's own stats to runningOutstanding yet, 
+      // because target month is currently active/selected.
+      break;
+    }
+
+    // This is a past month relative to the target month.
+    // Calculate stats for this past month
+    const stats = calculateMonthStats(currentLoopDate, attendance, baseSalary, freeAbsentsPerMonth, actualToday);
+    const grossAccrued = stats.finalSalary;
+    
+    // Total due at the end of this past month
+    const totalDue = grossAccrued - totalAdvances + runningOutstanding - totalPayouts;
+
+    // Check settlement
+    const isSettled = settlements && (monthStr in settlements);
+    const settledAmount = isSettled ? (settlements[monthStr] ?? 0) : 0;
+
+    if (!isSettled) {
+      // It's unsettled. Add to list of unsettled months.
+      unsettledMonths.push(monthStr);
+    }
+
+    // Compute outstanding carried forward to the next month in the chain
+    runningOutstanding = Math.max(0, totalDue - settledAmount);
+  }
+
+  return {
+    outstandingBalance: runningOutstanding,
+    currentMonthPayouts,
+    unsettledMonths
   };
 }

@@ -5,20 +5,23 @@ import { CashAdvance } from '../types';
 interface QuickCashAdvanceModalProps {
   dateStr: string; // YYYY-MM-DD
   cashAdvances: CashAdvance[];
+  outstandingBalance: number;
   onClose: () => void;
-  onAddAdvance: (amount: number, date: string, description: string) => void;
+  onAddAdvance: (amount: number, date: string, description: string, type: 'ADVANCE' | 'PAYOUT') => void;
   onDeleteAdvance: (id: string) => void;
 }
 
 export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
   dateStr,
   cashAdvances,
+  outstandingBalance,
   onClose,
   onAddAdvance,
   onDeleteAdvance,
 }) => {
   const [amount, setAmount] = useState<string>('');
   const [description, setDescription] = useState<string>('');
+  const [txType, setTxType] = useState<'ADVANCE' | 'PAYOUT'>('ADVANCE');
   const [error, setError] = useState<string | null>(null);
   const [isClosing, setIsClosing] = useState<boolean>(false);
 
@@ -56,16 +59,18 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
 
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      setError('Please enter a valid cash advance amount.');
+      setError(txType === 'PAYOUT' ? 'Please enter a valid payout amount.' : 'Please enter a valid cash advance amount.');
       return;
     }
 
-    onAddAdvance(parsedAmount, dateStr, description.trim() || 'Cash Advance');
+    if (txType === 'PAYOUT' && parsedAmount > outstandingBalance) {
+      setError(`Payout amount cannot exceed the outstanding balance of ₹${outstandingBalance.toLocaleString()}.`);
+      return;
+    }
+
+    onAddAdvance(parsedAmount, dateStr, description.trim() || (txType === 'PAYOUT' ? 'Outstanding Balance Payout' : 'Cash Advance'), txType);
     setAmount('');
     setDescription('');
-    // We don't automatically close so the user can see it added or add another, but let's close it or keep it open.
-    // Usually, closing on success is best, but keeping it open so they see "existing advances" update is also cool.
-    // Let's close it so the flow is quick and simple!
     handleClose();
   };
 
@@ -118,7 +123,12 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
                     className="flex items-center justify-between bg-slate-50 dark:bg-slate-850/55 border border-slate-150 dark:border-slate-800/80 rounded-lg p-2.5 text-xs font-medium"
                   >
                     <div className="space-y-0.5">
-                      <p className="font-bold text-slate-800 dark:text-slate-200">₹{adv.amount.toLocaleString()}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-bold text-slate-800 dark:text-slate-200">₹{adv.amount.toLocaleString()}</p>
+                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${adv.type === 'PAYOUT' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-350' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'}`}>
+                          {adv.type === 'PAYOUT' ? 'Payout' : 'Advance'}
+                        </span>
+                      </div>
                       <p className="text-[10px] text-slate-400 dark:text-slate-500">{adv.description}</p>
                     </div>
                     <button
@@ -136,9 +146,38 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
 
           {/* New Advance Form */}
           <form onSubmit={handleSubmit} className="space-y-3.5">
+            {outstandingBalance > 0 && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                  Transaction Type
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setTxType('ADVANCE')}
+                    className={`py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${txType === 'ADVANCE' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-350'}`}
+                  >
+                    Cash Advance
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTxType('PAYOUT')}
+                    className={`py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${txType === 'PAYOUT' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-350'}`}
+                  >
+                    Outstanding Payout
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-medium">
+                  {txType === 'ADVANCE'
+                    ? "This amount will be deducted from the current month's accrued salary."
+                    : `This amount will pay off part or all of the ₹${outstandingBalance.toLocaleString()} outstanding balance.`}
+                </p>
+              </div>
+            )}
+
             <div>
               <label htmlFor="quick-advance-amount" className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                Advance Amount (₹)
+                {txType === 'PAYOUT' ? 'Payout Amount (₹)' : 'Advance Amount (₹)'}
               </label>
               <div className="relative rounded-lg shadow-2xs">
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -195,7 +234,7 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-2xs hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Add Advance</span>
+                <span>{txType === 'PAYOUT' ? 'Add Payout' : 'Add Advance'}</span>
               </button>
             </div>
           </form>

@@ -10,7 +10,7 @@ import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { AttendanceRecord, AttendanceStatus, MonthStats, CashAdvance } from './types';
 import { APP_VERSION, BASE_SALARY, FREE_ABSENTS_PER_MONTH, MONTH_NAMES } from './constants';
 import { generateSyncCode, saveTrackerData, subscribeToTracker, checkSyncCodeExists, updateSingleAttendance, addCashAdvance, deleteCashAdvance, updateConfig } from './firebase';
-import { calculateMonthStats } from './utils';
+import { calculateMonthStats, calculateBalancesChain } from './utils';
 
 const App: React.FC = () => {
   // --- Dark Mode State ---
@@ -40,6 +40,10 @@ const App: React.FC = () => {
   const [cashAdvances, setCashAdvances] = useState<CashAdvance[]>(() => {
     const saved = localStorage.getItem('maid-cash-advances');
     return saved ? JSON.parse(saved) : [];
+  });
+  const [settlements, setSettlements] = useState<{ [monthStr: string]: number }>(() => {
+    const saved = localStorage.getItem('maid-settlements');
+    return saved ? JSON.parse(saved) : {};
   });
 
   // Configurable base salary and paid leaves per month
@@ -211,6 +215,10 @@ const App: React.FC = () => {
     localStorage.setItem('maid-free-absents', String(freeAbsentsPerMonth));
   }, [freeAbsentsPerMonth]);
 
+  useEffect(() => {
+    localStorage.setItem('maid-settlements', JSON.stringify(settlements));
+  }, [settlements]);
+
   // 3. Make sure we have a valid syncCode on start
   useEffect(() => {
     if (!syncCode) {
@@ -235,6 +243,7 @@ const App: React.FC = () => {
         const remoteSal = data.baseSalary ?? BASE_SALARY;
         const remoteLeaves = data.freeAbsentsPerMonth ?? FREE_ABSENTS_PER_MONTH;
         const remoteAdvances = data.cashAdvances || [];
+        const remoteSettlements = data.settlements || {};
 
         setAttendance(prev => {
           if (JSON.stringify(prev) !== JSON.stringify(remoteAtt)) {
@@ -262,6 +271,13 @@ const App: React.FC = () => {
         setCashAdvances(prev => {
           if (JSON.stringify(prev) !== JSON.stringify(remoteAdvances)) {
             return remoteAdvances;
+          }
+          return prev;
+        });
+
+        setSettlements(prev => {
+          if (JSON.stringify(prev) !== JSON.stringify(remoteSettlements)) {
+            return remoteSettlements;
           }
           return prev;
         });
@@ -297,6 +313,16 @@ const App: React.FC = () => {
 
     return () => clearTimeout(timer);
   }, [baseSalary, freeAbsentsPerMonth, isSyncReady, syncCode]);
+
+  useEffect(() => {
+    if (!isSyncReady || !syncCode) return;
+
+    const timer = setTimeout(() => {
+      saveTrackerData(syncCode, { settlements });
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [settlements, isSyncReady, syncCode]);
 
   const handleSalaryInputChange = (val: string) => {
     setSalaryInput(val);
@@ -374,12 +400,13 @@ const App: React.FC = () => {
     setIsDisconnecting(false);
   };
 
-  const handleAddAdvance = (amount: number, date: string, description: string) => {
+  const handleAddAdvance = (amount: number, date: string, description: string, type: 'ADVANCE' | 'PAYOUT' = 'ADVANCE') => {
     const newAdvance: CashAdvance = {
       id: Math.random().toString(36).substring(2, 11) + Date.now().toString(36),
       amount,
       date,
-      description
+      description,
+      type
     };
     setCashAdvances(prev => [...prev, newAdvance]);
     if (isSyncReady && syncCode) {
@@ -488,10 +515,77 @@ const App: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  // --- Settlements Banner Logic ---
+  const [partialPaidInput, setPartialPaidInput] = useState<string>('');
+  const [showPartialInput, setShowPartialInput] = useState<boolean>(false);
+
   // --- Calculations ---
   const stats: MonthStats = useMemo(() => {
     return calculateMonthStats(currentDate, attendance, baseSalary, freeAbsentsPerMonth, actualToday);
   }, [currentDate, attendance, baseSalary, freeAbsentsPerMonth, actualToday]);
+
+  const balanceInfo = useMemo(() => {
+    return calculateBalancesChain(currentDate, attendance, cashAdvances, settlements, baseSalary, freeAbsentsPerMonth, actualToday);
+  }, [currentDate, attendance, cashAdvances, settlements, baseSalary, freeAbsentsPerMonth, actualToday]);
+
+  const outstandingBalance = balanceInfo.outstandingBalance;
+  const currentMonthPayouts = balanceInfo.currentMonthPayouts;
+  const unsettledMonths = balanceInfo.unsettledMonths;
+
+  const earliestUnsettledMonth = useMemo(() => {
+    return unsettledMonths[0] || null;
+  }, [unsettledMonths]);
+
+  useEffect(() => {
+    setShowPartialInput(false);
+    setPartialPaidInput('');
+  }, [earliestUnsettledMonth]);
+
+  const earliestUnsettledNetDue = useMemo(() => {
+    if (!earliestUnsettledMonth) return 0;
+    const [yr, mth] = earliestUnsettledMonth.split('-').map(Number);
+    const date = new Date(yr, mth - 1, 1);
+    const mStats = calculateMonthStats(date, attendance, baseSalary, freeAbsentsPerMonth, actualToday);
+    const chain = calculateBalancesChain(date, attendance, cashAdvances, settlements, baseSalary, freeAbsentsPerMonth, actualToday);
+    const prefix = earliestUnsettledMonth;
+    const mAdvances = cashAdvances
+      .filter(adv => adv.date.startsWith(prefix) && (!adv.type || adv.type === 'ADVANCE'))
+      .reduce((sum, adv) => sum + adv.amount, 0);
+    const mPayouts = cashAdvances
+      .filter(adv => adv.date.startsWith(prefix) && adv.type === 'PAYOUT')
+      .reduce((sum, adv) => sum + adv.amount, 0);
+
+    return Math.max(0, Math.round(mStats.finalSalary) - mAdvances + chain.outstandingBalance - mPayouts);
+  }, [earliestUnsettledMonth, attendance, cashAdvances, settlements, baseSalary, freeAbsentsPerMonth, actualToday]);
+
+  const handleSettleFully = () => {
+    if (!earliestUnsettledMonth) return;
+    setSettlements(prev => ({
+      ...prev,
+      [earliestUnsettledMonth]: earliestUnsettledNetDue
+    }));
+  };
+
+  const handleSettleZero = () => {
+    if (!earliestUnsettledMonth) return;
+    setSettlements(prev => ({
+      ...prev,
+      [earliestUnsettledMonth]: 0
+    }));
+  };
+
+  const handleSettlePartial = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!earliestUnsettledMonth) return;
+    const amt = parseInt(partialPaidInput, 10);
+    if (isNaN(amt) || amt < 0) return;
+    setSettlements(prev => ({
+      ...prev,
+      [earliestUnsettledMonth]: amt
+    }));
+    setPartialPaidInput('');
+    setShowPartialInput(false);
+  };
 
   // --- Cash Advance Calculations ---
   const totalMonthlyCashAdvances = useMemo(() => {
@@ -501,13 +595,13 @@ const App: React.FC = () => {
     const prefix = `${year}-${monthStr}`;
 
     return cashAdvances
-      .filter(adv => adv.date.startsWith(prefix))
+      .filter(adv => adv.date.startsWith(prefix) && (!adv.type || adv.type === 'ADVANCE'))
       .reduce((sum, adv) => sum + adv.amount, 0);
   }, [cashAdvances, currentDate]);
 
   const netPayable = useMemo(() => {
-    return Math.max(0, Math.round(stats.finalSalary) - totalMonthlyCashAdvances);
-  }, [stats.finalSalary, totalMonthlyCashAdvances]);
+    return Math.max(0, Math.round(stats.finalSalary) - totalMonthlyCashAdvances + outstandingBalance - currentMonthPayouts);
+  }, [stats.finalSalary, totalMonthlyCashAdvances, outstandingBalance, currentMonthPayouts]);
 
 
   // --- Render ---
@@ -564,6 +658,79 @@ const App: React.FC = () => {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 print:hidden">
         
+        {earliestUnsettledMonth && (
+          <div className="bg-indigo-600 dark:bg-indigo-900 border border-indigo-500/30 rounded-2xl shadow-lg p-5 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-4 animate-fade-in print:hidden">
+            <div className="flex items-start gap-3">
+              <div className="bg-indigo-700/60 p-2.5 rounded-xl text-indigo-100 shrink-0">
+                <AlertCircle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm sm:text-base font-bold tracking-tight">
+                  {MONTH_NAMES[Number(earliestUnsettledMonth.split('-')[1]) - 1]} {earliestUnsettledMonth.split('-')[0]} is closed.
+                </h4>
+                <p className="text-xs text-indigo-150 leading-relaxed font-medium">
+                  Did you pay the worker their net due of <span className="font-bold text-white font-mono bg-indigo-700/40 px-1.5 py-0.5 rounded">₹{earliestUnsettledNetDue.toLocaleString()}</span>?
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+              {!showPartialInput ? (
+                <>
+                  <button
+                    onClick={handleSettleFully}
+                    className="px-4 py-2 bg-white hover:bg-slate-50 text-indigo-700 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
+                  >
+                    Yes, Paid Fully
+                  </button>
+                  <button
+                    onClick={() => setShowPartialInput(true)}
+                    className="px-4 py-2 bg-indigo-500 hover:bg-indigo-400 text-white font-bold rounded-xl text-xs border border-indigo-400/50 transition-colors cursor-pointer"
+                  >
+                    Paid Partially
+                  </button>
+                  <button
+                    onClick={handleSettleZero}
+                    className="px-4 py-2 bg-indigo-700 hover:bg-indigo-650 text-indigo-200 hover:text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                  >
+                    No, Carry Forward
+                  </button>
+                </>
+              ) : (
+                <form onSubmit={handleSettlePartial} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="relative rounded-xl shadow-xs">
+                    <span className="absolute left-3 top-2 text-indigo-300 text-xs font-bold">₹</span>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      placeholder="Amount paid"
+                      value={partialPaidInput}
+                      onChange={(e) => setPartialPaidInput(e.target.value)}
+                      className="pl-7 pr-3 py-1.5 w-full sm:w-36 rounded-xl bg-indigo-700/60 border border-indigo-400 text-white placeholder-indigo-300 outline-none text-xs font-bold font-mono focus:ring-1 focus:ring-white"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowPartialInput(false)}
+                      className="px-3.5 py-1.5 bg-indigo-700 text-indigo-200 hover:text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Header Stats Section */}
         <div>
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
@@ -594,6 +761,20 @@ const App: React.FC = () => {
                           >
                             <FileText className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
                             <span>Print Slip</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              const today = new Date();
+                              const y = today.getFullYear();
+                              const m = String(today.getMonth() + 1).padStart(2, '0');
+                              const d = String(today.getDate()).padStart(2, '0');
+                              setLongPressedDate(`${y}-${m}-${d}`);
+                              setIsActionsOpen(false);
+                            }}
+                            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs sm:text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-left transition-colors cursor-pointer font-medium font-semibold"
+                          >
+                            <Banknote className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+                            <span>Record Advance / Payout</span>
                           </button>
                           <div className="border-t border-slate-100 dark:border-slate-700/60 my-1" />
                           <button
@@ -642,7 +823,11 @@ const App: React.FC = () => {
                 value={`₹${netPayable.toLocaleString()}`} 
                 icon={Wallet} 
                 colorClass="bg-emerald-500 text-emerald-600"
-                subtext="Accrued minus advances"
+                subtext={
+                  outstandingBalance > 0 || currentMonthPayouts > 0
+                    ? `Inc. ₹${outstandingBalance.toLocaleString()} carry & -₹${currentMonthPayouts.toLocaleString()} payout`
+                    : "Accrued minus advances"
+                }
             />
             <StatCard 
                 label="Days Worked" 
@@ -724,6 +909,20 @@ const App: React.FC = () => {
                         <span>Cash Advances</span>
                         <span className="font-medium">-₹{totalMonthlyCashAdvances.toLocaleString()}</span>
                     </div>
+
+                    {outstandingBalance > 0 && (
+                      <div className="flex justify-between text-indigo-600 dark:text-indigo-400 font-semibold">
+                        <span>Previous Outstanding</span>
+                        <span className="font-medium">+₹{outstandingBalance.toLocaleString()}</span>
+                      </div>
+                    )}
+
+                    {currentMonthPayouts > 0 && (
+                      <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                        <span>Outstanding Balance Paid</span>
+                        <span className="font-medium">-₹{currentMonthPayouts.toLocaleString()}</span>
+                      </div>
+                    )}
                     
                     <div className="mt-4 pt-3 border-t border-dashed border-slate-300 dark:border-slate-700 flex justify-between items-center">
                         <span className="font-bold text-slate-700 dark:text-slate-300">Net Due Payment</span>
@@ -750,6 +949,8 @@ const App: React.FC = () => {
         netPayable={netPayable}
         freeAbsentsPerMonth={freeAbsentsPerMonth}
         syncCode={syncCode}
+        outstandingBalance={outstandingBalance}
+        currentMonthPayouts={currentMonthPayouts}
       />
 
       <WelcomeOnboardingModal
@@ -1027,6 +1228,7 @@ const App: React.FC = () => {
         <QuickCashAdvanceModal
           dateStr={longPressedDate}
           cashAdvances={cashAdvances}
+          outstandingBalance={outstandingBalance}
           onClose={() => setLongPressedDate(null)}
           onAddAdvance={handleAddAdvance}
           onDeleteAdvance={handleDeleteAdvance}
