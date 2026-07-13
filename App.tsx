@@ -526,6 +526,17 @@ const App: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
+                {deferredPrompt && (
+                  <button
+                    type="button"
+                    onClick={handleInstallClick}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all shadow-xs shrink-0 cursor-pointer"
+                    title="Install Aide App"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Install App</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setDarkMode(!darkMode)}
