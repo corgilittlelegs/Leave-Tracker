@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { X, Banknote, Trash2, Plus, AlertCircle, Calendar } from 'lucide-react';
 import { CashAdvance } from '../types';
 
@@ -31,6 +31,14 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
       onClose();
     }, 200); // match 0.2s duration of fade-out / zoom-out
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Format YYYY-MM-DD to readable date
   const readableDate = useMemo(() => {
@@ -80,8 +88,12 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
       <div className="fixed inset-0" onClick={handleClose}></div>
 
       {/* Modal Container */}
-      <div className={`relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden flex flex-col z-10 ${isClosing ? 'animate-zoom-out' : 'animate-zoom-in'}`}>
-        
+      <div
+        role="dialog"
+        aria-modal="true"
+        className={`relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden flex flex-col z-10 ${isClosing ? 'animate-zoom-out' : 'animate-zoom-in'}`}
+      >
+
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40">
           <div className="flex items-center gap-2">
@@ -125,7 +137,7 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-1.5">
                         <p className="font-bold text-slate-800 dark:text-slate-200">₹{adv.amount.toLocaleString()}</p>
-                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${adv.type === 'PAYOUT' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-350' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'}`}>
+                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${adv.type === 'PAYOUT' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'}`}>
                           {adv.type === 'PAYOUT' ? 'Payout' : 'Advance'}
                         </span>
                       </div>

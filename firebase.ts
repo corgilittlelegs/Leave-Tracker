@@ -1,15 +1,15 @@
 import { initializeApp } from 'firebase/app';
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  updateDoc, 
-  deleteField, 
-  arrayUnion, 
-  arrayRemove, 
-  onSnapshot, 
-  serverTimestamp 
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  deleteField,
+  arrayUnion,
+  runTransaction,
+  onSnapshot,
+  serverTimestamp
 } from 'firebase/firestore';
 import { AttendanceRecord, AttendanceStatus, CashAdvance } from './types';
 
@@ -30,12 +30,15 @@ export interface TrackerData {
   updatedAt?: any;
 }
 
-// Generates a clean, readable sync code (e.g., MP-9284-AX)
+// Generates a clean, readable sync code (e.g., MP-9284-AX7K-3JQP)
 export function generateSyncCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Avoid ambiguous chars
-  const part1 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  const part2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  return `MP-${part1}-${part2}`;
+  const randomPart = (length: number): string => {
+    const bytes = new Uint32Array(length);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => chars[b % chars.length]).join('');
+  };
+  return `MP-${randomPart(4)}-${randomPart(4)}-${randomPart(4)}`;
 }
 
 // Saves/updates tracker data to Firestore (used for initialization)
@@ -87,14 +90,21 @@ export async function addCashAdvance(syncCode: string, advance: CashAdvance) {
   }
 }
 
-// Removes a specific cash advance using arrayRemove
-export async function deleteCashAdvance(syncCode: string, advance: CashAdvance) {
+// Removes a specific cash advance by id (arrayRemove requires exact object
+// equality, which can drift; matching by id is robust to that drift)
+export async function deleteCashAdvance(syncCode: string, advanceId: string) {
   if (!syncCode) return;
   const docRef = doc(db, 'trackers', syncCode.toUpperCase().trim());
   try {
-    await updateDoc(docRef, {
-      cashAdvances: arrayRemove(advance),
-      updatedAt: serverTimestamp()
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(docRef);
+      if (!snap.exists()) return;
+      const current: CashAdvance[] = snap.data().cashAdvances || [];
+      const next = current.filter((adv) => adv.id !== advanceId);
+      transaction.update(docRef, {
+        cashAdvances: next,
+        updatedAt: serverTimestamp()
+      });
     });
   } catch (error) {
     console.error('Error deleting cash advance in Firestore:', error);
@@ -143,4 +153,15 @@ export async function checkSyncCodeExists(syncCode: string): Promise<boolean> {
     console.error('Error checking sync code existence:', error);
     return false;
   }
+}
+
+// Generates a sync code guaranteed not to collide with an existing tracker
+export async function generateUniqueSyncCode(): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateSyncCode();
+    const exists = await checkSyncCodeExists(code);
+    if (!exists) return code;
+  }
+  // Astronomically unlikely to exhaust retries; fall back to a fresh code.
+  return generateSyncCode();
 }

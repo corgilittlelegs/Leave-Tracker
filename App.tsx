@@ -9,8 +9,8 @@ import { WelcomeOnboardingModal } from './components/WelcomeOnboardingModal';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { AttendanceRecord, AttendanceStatus, MonthStats, CashAdvance } from './types';
 import { APP_VERSION, BASE_SALARY, FREE_ABSENTS_PER_MONTH, MONTH_NAMES } from './constants';
-import { generateSyncCode, saveTrackerData, subscribeToTracker, checkSyncCodeExists, updateSingleAttendance, addCashAdvance, deleteCashAdvance, updateConfig } from './firebase';
-import { calculateMonthStats, calculateBalancesChain } from './utils';
+import { generateUniqueSyncCode, saveTrackerData, subscribeToTracker, checkSyncCodeExists, updateSingleAttendance, addCashAdvance, deleteCashAdvance, updateConfig } from './firebase';
+import { calculateMonthStats, calculateBalancesChain, readJSON } from './utils';
 
 const App: React.FC = () => {
   // --- Dark Mode State ---
@@ -32,19 +32,19 @@ const App: React.FC = () => {
 
   // --- State ---
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  const [attendance, setAttendance] = useState<AttendanceRecord>({});
+  const [attendance, setAttendance] = useState<AttendanceRecord>(() =>
+    readJSON<AttendanceRecord>('maid-attendance-data', {})
+  );
   const [isSummaryOpen, setIsSummaryOpen] = useState<boolean>(false);
   const [isActionsOpen, setIsActionsOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [longPressedDate, setLongPressedDate] = useState<string | null>(null);
-  const [cashAdvances, setCashAdvances] = useState<CashAdvance[]>(() => {
-    const saved = localStorage.getItem('maid-cash-advances');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [settlements, setSettlements] = useState<{ [monthStr: string]: number }>(() => {
-    const saved = localStorage.getItem('maid-settlements');
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [cashAdvances, setCashAdvances] = useState<CashAdvance[]>(() =>
+    readJSON<CashAdvance[]>('maid-cash-advances', [])
+  );
+  const [settlements, setSettlements] = useState<{ [monthStr: string]: number }>(() =>
+    readJSON<{ [monthStr: string]: number }>('maid-settlements', {})
+  );
 
   // Configurable base salary and paid leaves per month
   const [baseSalary, setBaseSalary] = useState<number>(() => {
@@ -66,8 +66,25 @@ const App: React.FC = () => {
     return saved ? saved : FREE_ABSENTS_PER_MONTH.toString();
   });
 
-  // Use a stable reference for "today" to avoid hydration mismatches or inconsistencies during render cycles
-  const actualToday = useMemo(() => new Date(), []);
+  // Stable reference for "today" that only changes when the calendar date actually
+  // rolls over (avoids inconsistencies mid-render while still refreshing across midnight
+  // in a long-lived PWA session).
+  const [actualToday, setActualToday] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    const refreshToday = () => {
+      setActualToday(prev => {
+        const now = new Date();
+        return now.toDateString() === prev.toDateString() ? prev : now;
+      });
+    };
+    document.addEventListener('visibilitychange', refreshToday);
+    const interval = setInterval(refreshToday, 60_000);
+    return () => {
+      document.removeEventListener('visibilitychange', refreshToday);
+      clearInterval(interval);
+    };
+  }, []);
 
   // Compute if the displayed month is a past month relative to current actual month
   const isPastMonth = useMemo(() => {
@@ -135,7 +152,7 @@ const App: React.FC = () => {
     setDeferredPrompt(null);
   };
 
-  const handleCompleteOnboarding = (salary: number, leaves: number) => {
+  const handleCompleteOnboarding = async (salary: number, leaves: number) => {
     setBaseSalary(salary);
     setFreeAbsentsPerMonth(leaves);
     setSalaryInput(String(salary));
@@ -147,7 +164,7 @@ const App: React.FC = () => {
 
     // Ensure sync code is generated (triggers Firestore collection init)
     if (!syncCode) {
-      const newCode = generateSyncCode();
+      const newCode = await generateUniqueSyncCode();
       setSyncCode(newCode);
       localStorage.setItem('maid-sync-code', newCode);
     }
@@ -176,31 +193,20 @@ const App: React.FC = () => {
     }
   };
 
-  // 1. Initial Local Storage Cache loading
+  // Close the settings drawer / actions menu on Escape
   useEffect(() => {
-    const saved = localStorage.getItem('maid-attendance-data');
-    if (saved) {
-      try {
-        setAttendance(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse saved attendance", e);
-      }
-    }
-    const savedAdvances = localStorage.getItem('maid-cash-advances');
-    if (savedAdvances) {
-      try {
-        setCashAdvances(JSON.parse(savedAdvances));
-      } catch (e) {
-        console.error("Failed to parse saved cash advances", e);
-      }
-    }
-  }, []);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (isSettingsOpen) setIsSettingsOpen(false);
+      else if (isActionsOpen) setIsActionsOpen(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isSettingsOpen, isActionsOpen]);
 
-  // 2. Local Storage Cache saving (for offline resilience)
+  // 1. Local Storage Cache saving (for offline resilience)
   useEffect(() => {
-    if (Object.keys(attendance).length > 0) {
-      localStorage.setItem('maid-attendance-data', JSON.stringify(attendance));
-    }
+    localStorage.setItem('maid-attendance-data', JSON.stringify(attendance));
   }, [attendance]);
 
   useEffect(() => {
@@ -219,16 +225,21 @@ const App: React.FC = () => {
     localStorage.setItem('maid-settlements', JSON.stringify(settlements));
   }, [settlements]);
 
-  // 3. Make sure we have a valid syncCode on start
+  // 2. Make sure we have a valid syncCode on start
   useEffect(() => {
-    if (!syncCode) {
-      const newCode = generateSyncCode();
+    if (syncCode) return;
+    let cancelled = false;
+    generateUniqueSyncCode().then((newCode) => {
+      if (cancelled) return;
       setSyncCode(newCode);
       localStorage.setItem('maid-sync-code', newCode);
-    }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [syncCode]);
 
-  // 4. Firestore real-time listener to sync remote changes
+  // 3. Firestore real-time listener to sync remote changes
   useEffect(() => {
     if (!syncCode) return;
 
@@ -290,7 +301,8 @@ const App: React.FC = () => {
           attendance,
           baseSalary,
           freeAbsentsPerMonth,
-          cashAdvances
+          cashAdvances,
+          settlements
         }).then(() => {
           setIsSyncReady(true);
         }).catch((err) => {
@@ -303,7 +315,7 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, [syncCode]);
 
-  // 5. Save settings configurations back to Firestore (debounced to avoid constant writing)
+  // 4. Save settings configurations back to Firestore (debounced to avoid constant writing)
   useEffect(() => {
     if (!isSyncReady || !syncCode) return;
 
@@ -392,8 +404,8 @@ const App: React.FC = () => {
     }
   };
 
-  const handleGenerateNewCode = () => {
-    const newCode = generateSyncCode();
+  const handleGenerateNewCode = async () => {
+    const newCode = await generateUniqueSyncCode();
     localStorage.setItem('maid-sync-code', newCode);
     setSyncCode(newCode);
     setIsSyncReady(false);
@@ -402,7 +414,7 @@ const App: React.FC = () => {
 
   const handleAddAdvance = (amount: number, date: string, description: string, type: 'ADVANCE' | 'PAYOUT' = 'ADVANCE') => {
     const newAdvance: CashAdvance = {
-      id: Math.random().toString(36).substring(2, 11) + Date.now().toString(36),
+      id: crypto.randomUUID(),
       amount,
       date,
       description,
@@ -419,7 +431,7 @@ const App: React.FC = () => {
     if (!targetAdvance) return;
     setCashAdvances(prev => prev.filter(adv => adv.id !== id));
     if (isSyncReady && syncCode) {
-      deleteCashAdvance(syncCode, targetAdvance);
+      deleteCashAdvance(syncCode, id);
     }
   };
 
@@ -503,16 +515,16 @@ const App: React.FC = () => {
       loopDate.setDate(loopDate.getDate() + 1);
     }
 
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + rows.map(row => row.join(",")).join("\n");
-    
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = rows.map(row => row.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", url);
     link.setAttribute("download", `MaidAttendance_${period}_${year}_${period === 'month' ? MONTH_NAMES[month] : 'Full'}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // --- Settlements Banner Logic ---
@@ -668,7 +680,7 @@ const App: React.FC = () => {
                 <h4 className="text-sm sm:text-base font-bold tracking-tight">
                   {MONTH_NAMES[Number(earliestUnsettledMonth.split('-')[1]) - 1]} {earliestUnsettledMonth.split('-')[0]} is closed.
                 </h4>
-                <p className="text-xs text-indigo-150 leading-relaxed font-medium">
+                <p className="text-xs text-indigo-100 leading-relaxed font-medium">
                   Did you pay the worker their net due of <span className="font-bold text-white font-mono bg-indigo-700/40 px-1.5 py-0.5 rounded">₹{earliestUnsettledNetDue.toLocaleString()}</span>?
                 </p>
               </div>
@@ -691,7 +703,7 @@ const App: React.FC = () => {
                   </button>
                   <button
                     onClick={handleSettleZero}
-                    className="px-4 py-2 bg-indigo-700 hover:bg-indigo-650 text-indigo-200 hover:text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                    className="px-4 py-2 bg-indigo-700 hover:bg-indigo-600 text-indigo-200 hover:text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
                   >
                     No, Carry Forward
                   </button>
@@ -948,7 +960,6 @@ const App: React.FC = () => {
         totalMonthlyCashAdvances={totalMonthlyCashAdvances}
         netPayable={netPayable}
         freeAbsentsPerMonth={freeAbsentsPerMonth}
-        syncCode={syncCode}
         outstandingBalance={outstandingBalance}
         currentMonthPayouts={currentMonthPayouts}
       />

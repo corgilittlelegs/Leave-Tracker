@@ -300,7 +300,7 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
             <button
               type="button"
               onClick={handleUseDefaults}
-              className="text-xs text-slate-450 dark:text-slate-500 hover:text-indigo-650 dark:hover:text-indigo-400 transition-colors font-semibold cursor-pointer underline decoration-dotted underline-offset-4"
+              className="text-xs text-slate-450 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-semibold cursor-pointer underline decoration-dotted underline-offset-4"
             >
               Or start with defaults (₹{defaultBaseSalary.toLocaleString()} salary, {defaultFreeLeaves} paid leaves)
             </button>

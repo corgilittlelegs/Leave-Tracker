@@ -1,6 +1,21 @@
 import { AttendanceRecord, MonthStats, CashAdvance } from './types';
 
 /**
+ * Safely reads and parses a JSON value from localStorage, falling back to
+ * `fallback` if the key is absent or the stored value is corrupt.
+ */
+export function readJSON<T>(key: string, fallback: T): T {
+  const saved = localStorage.getItem(key);
+  if (!saved) return fallback;
+  try {
+    return JSON.parse(saved) as T;
+  } catch (e) {
+    console.error(`Failed to parse localStorage key "${key}"`, e);
+    return fallback;
+  }
+}
+
+/**
  * Calculates attendance and salary statistics for a specific month.
  * 
  * @param currentDate The currently viewed date (used to determine month and year)

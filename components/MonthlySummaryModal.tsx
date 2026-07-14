@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { X, Printer, Download, Calendar, Banknote, Shield, CheckCircle, FileText, User, CreditCard } from 'lucide-react';
 import { AttendanceRecord, CashAdvance, MonthStats } from '../types';
 import { MONTH_NAMES } from '../constants';
@@ -14,7 +14,6 @@ interface MonthlySummaryModalProps {
   totalMonthlyCashAdvances: number;
   netPayable: number;
   freeAbsentsPerMonth: number;
-  syncCode: string | null;
   outstandingBalance: number;
   currentMonthPayouts: number;
 }
@@ -30,7 +29,6 @@ export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
   totalMonthlyCashAdvances,
   netPayable,
   freeAbsentsPerMonth,
-  syncCode,
   outstandingBalance,
   currentMonthPayouts,
 }) => {
@@ -135,6 +133,15 @@ export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
     return days;
   }, [currentYear, currentMonth, attendance, stats, freeAbsentsPerMonth]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handlePrint = () => {
@@ -143,10 +150,13 @@ export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto print:p-0 print:bg-white print:absolute print:inset-0 animate-fade-in">
-      
+
       {/* Modal Card wrapper - print styles force it to occupy the whole screen with no rounded corners/shadows */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden print:shadow-none print:border-none print:max-h-full print:rounded-none print:w-full print:h-full animate-zoom-in">
-        
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden print:shadow-none print:border-none print:max-h-full print:rounded-none print:w-full print:h-full animate-zoom-in"
+      >
         {/* Header - Hidden during print */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 shrink-0 print:hidden">
           <div className="flex items-center gap-2">
@@ -243,7 +253,7 @@ export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
                   Aide Attendance & Salary Statement
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Generated via Aide • Secure Cloud Sync ID: <span className="font-mono text-indigo-600 dark:text-indigo-400 print:text-slate-800 font-bold">{syncCode || 'OFFLINE'}</span>
+                  Generated via Aide Attendance & Salary Tracker
                 </p>
               </div>
               <div className="bg-slate-900 dark:bg-slate-800 text-white px-4 py-2 rounded-lg text-center shrink-0 print:border print:border-slate-800 print:text-black print:bg-white">
@@ -376,7 +386,7 @@ export const MonthlySummaryModal: React.FC<MonthlySummaryModalProps> = ({
                             <td className="py-2 px-3 text-slate-800 dark:text-slate-200">
                               <span>{adv.description || (adv.type === 'PAYOUT' ? 'Outstanding Balance Payout' : 'Cash Advance')}</span>
                               {adv.type === 'PAYOUT' && (
-                                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-350 print:border print:border-emerald-500">
+                                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 print:border print:border-emerald-500">
                                   Payout
                                 </span>
                               )}
