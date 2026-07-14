@@ -7,7 +7,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig(() => {
     const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'));
     return {
-      base: process.env.GITHUB_ACTIONS ? '/Leave-Tracker/' : '/',
+      base: process.env.GITHUB_ACTIONS ? '/Aide/' : '/',
       server: {
         port: 3000,
         host: '0.0.0.0',
