@@ -1,11 +1,10 @@
 {
-  "projectId": "resonant-operator-qrwfn",
-  "appId": "1:443521680899:web:95bd7a6a4145e5b3193036",
-  "apiKey": "AIzaSyBa9uDNGZuq9jxAiNEVQi2wSThHLx2YPqo",
-  "authDomain": "resonant-operator-qrwfn.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-maidpaytracker-ff33afdc-26a5-4735-9593-76f49faeac45",
-  "storageBucket": "resonant-operator-qrwfn.firebasestorage.app",
-  "messagingSenderId": "443521680899",
-  "measurementId": "",
-  "oAuthClientId": "443521680899-bjg5ju6vlc1s88ti85s5oduj3v0j930s.apps.googleusercontent.com"
+  "projectId": "aide-b88e2",
+  "appId": "1:424933898168:web:b51eae20e1b345d287c14d",
+  "apiKey": "AIzaSyAVwZ02Nqjv5IAuXNITS7ZWmOM8JI44TTI",
+  "authDomain": "aide-b88e2.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "aide-b88e2.firebasestorage.app",
+  "messagingSenderId": "424933898168",
+  "measurementId": "G-B4H9Y26ESM"
 }
