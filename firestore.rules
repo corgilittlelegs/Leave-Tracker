@@ -10,7 +10,7 @@ service cloud.firestore {
       allow create, update: if
         request.resource.data.keys().hasOnly(
           ['attendance', 'baseSalary', 'freeAbsentsPerMonth',
-           'cashAdvances', 'settlements', 'updatedAt'])
+           'cashAdvances', 'settlements', 'updatedAt', 'startDate'])
         && request.resource.data.baseSalary is number
         && request.resource.data.freeAbsentsPerMonth is number
         && (!('cashAdvances' in request.resource.data)
@@ -18,7 +18,9 @@ service cloud.firestore {
         && (!('attendance' in request.resource.data)
             || request.resource.data.attendance is map)
         && (!('settlements' in request.resource.data)
-            || request.resource.data.settlements is map);
+            || request.resource.data.settlements is map)
+        && (!('startDate' in request.resource.data)
+            || request.resource.data.startDate is string);
       allow delete: if false;
     }
   }
