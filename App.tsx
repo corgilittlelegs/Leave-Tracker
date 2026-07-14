@@ -18,7 +18,7 @@ const PWAUpdatePrompt = React.lazy(() =>
 import { AttendanceRecord, AttendanceStatus, MonthStats, CashAdvance } from './types';
 import { APP_VERSION, BASE_SALARY, FREE_ABSENTS_PER_MONTH, MONTH_NAMES } from './constants';
 import { generateUniqueSyncCode, saveTrackerData, subscribeToTracker, checkSyncCodeExists, updateSingleAttendance, addCashAdvance, deleteCashAdvance, updateConfig } from './firebase';
-import { calculateMonthStats, calculateBalancesChain, readJSON } from './utils';
+import { calculateMonthStats, calculateBalancesChain, readJSON, getEffectiveStartDate } from './utils';
 
 const App: React.FC = () => {
   // --- Dark Mode State ---
@@ -53,6 +53,9 @@ const App: React.FC = () => {
   const [settlements, setSettlements] = useState<{ [monthStr: string]: number }>(() =>
     readJSON<{ [monthStr: string]: number }>('maid-settlements', {})
   );
+  const [startDate, setStartDate] = useState<string>(() => {
+    return localStorage.getItem('maid-start-date') || '';
+  });
 
   // Configurable base salary and paid leaves per month
   const [baseSalary, setBaseSalary] = useState<number>(() => {
@@ -170,6 +173,11 @@ const App: React.FC = () => {
     localStorage.setItem('maid-free-absents', String(leaves));
     localStorage.setItem('maid-setup-completed', 'true');
 
+    const today = new Date();
+    const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    setStartDate(currentMonthStr);
+    localStorage.setItem('maid-start-date', currentMonthStr);
+
     // Ensure sync code is generated (triggers Firestore collection init)
     if (!syncCode) {
       const newCode = await generateUniqueSyncCode();
@@ -233,6 +241,10 @@ const App: React.FC = () => {
     localStorage.setItem('maid-settlements', JSON.stringify(settlements));
   }, [settlements]);
 
+  useEffect(() => {
+    localStorage.setItem('maid-start-date', startDate);
+  }, [startDate]);
+
   // 2. Make sure we have a valid syncCode on start
   useEffect(() => {
     if (syncCode) return;
@@ -263,6 +275,14 @@ const App: React.FC = () => {
         const remoteLeaves = data.freeAbsentsPerMonth ?? FREE_ABSENTS_PER_MONTH;
         const remoteAdvances = data.cashAdvances || [];
         const remoteSettlements = data.settlements || {};
+        const remoteStartDate = data.startDate || '';
+
+        setStartDate(prev => {
+          if (prev !== remoteStartDate) {
+            return remoteStartDate;
+          }
+          return prev;
+        });
 
         setAttendance(prev => {
           if (JSON.stringify(prev) !== JSON.stringify(remoteAtt)) {
@@ -310,7 +330,8 @@ const App: React.FC = () => {
           baseSalary,
           freeAbsentsPerMonth,
           cashAdvances,
-          settlements
+          settlements,
+          startDate
         }).then(() => {
           setIsSyncReady(true);
         }).catch((err) => {
@@ -328,11 +349,11 @@ const App: React.FC = () => {
     if (!isSyncReady || !syncCode) return;
 
     const timer = setTimeout(() => {
-      updateConfig(syncCode, baseSalary, freeAbsentsPerMonth);
+      updateConfig(syncCode, baseSalary, freeAbsentsPerMonth, startDate);
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [baseSalary, freeAbsentsPerMonth, isSyncReady, syncCode]);
+  }, [baseSalary, freeAbsentsPerMonth, startDate, isSyncReady, syncCode]);
 
   useEffect(() => {
     if (!isSyncReady || !syncCode) return;
@@ -539,14 +560,19 @@ const App: React.FC = () => {
   const [partialPaidInput, setPartialPaidInput] = useState<string>('');
   const [showPartialInput, setShowPartialInput] = useState<boolean>(false);
 
+  // --- Effective Start Date ---
+  const effectiveStartDate = useMemo(() => {
+    return getEffectiveStartDate(startDate, attendance, cashAdvances, settlements);
+  }, [startDate, attendance, cashAdvances, settlements]);
+
   // --- Calculations ---
   const stats: MonthStats = useMemo(() => {
-    return calculateMonthStats(currentDate, attendance, baseSalary, freeAbsentsPerMonth, actualToday);
-  }, [currentDate, attendance, baseSalary, freeAbsentsPerMonth, actualToday]);
+    return calculateMonthStats(currentDate, attendance, baseSalary, freeAbsentsPerMonth, actualToday, effectiveStartDate);
+  }, [currentDate, attendance, baseSalary, freeAbsentsPerMonth, actualToday, effectiveStartDate]);
 
   const balanceInfo = useMemo(() => {
-    return calculateBalancesChain(currentDate, attendance, cashAdvances, settlements, baseSalary, freeAbsentsPerMonth, actualToday);
-  }, [currentDate, attendance, cashAdvances, settlements, baseSalary, freeAbsentsPerMonth, actualToday]);
+    return calculateBalancesChain(currentDate, attendance, cashAdvances, settlements, baseSalary, freeAbsentsPerMonth, actualToday, effectiveStartDate);
+  }, [currentDate, attendance, cashAdvances, settlements, baseSalary, freeAbsentsPerMonth, actualToday, effectiveStartDate]);
 
   const outstandingBalance = balanceInfo.outstandingBalance;
   const currentMonthPayouts = balanceInfo.currentMonthPayouts;
@@ -565,8 +591,8 @@ const App: React.FC = () => {
     if (!earliestUnsettledMonth) return 0;
     const [yr, mth] = earliestUnsettledMonth.split('-').map(Number);
     const date = new Date(yr, mth - 1, 1);
-    const mStats = calculateMonthStats(date, attendance, baseSalary, freeAbsentsPerMonth, actualToday);
-    const chain = calculateBalancesChain(date, attendance, cashAdvances, settlements, baseSalary, freeAbsentsPerMonth, actualToday);
+    const mStats = calculateMonthStats(date, attendance, baseSalary, freeAbsentsPerMonth, actualToday, effectiveStartDate);
+    const chain = calculateBalancesChain(date, attendance, cashAdvances, settlements, baseSalary, freeAbsentsPerMonth, actualToday, effectiveStartDate);
     const prefix = earliestUnsettledMonth;
     const mAdvances = cashAdvances
       .filter(adv => adv.date.startsWith(prefix) && (!adv.type || adv.type === 'ADVANCE'))
@@ -889,6 +915,7 @@ const App: React.FC = () => {
                 onDateClick={toggleAttendance}
                 onDateLongPress={setLongPressedDate}
                 isReadOnly={isPastMonth}
+                effectiveStartDate={effectiveStartDate}
              />
           </div>
 

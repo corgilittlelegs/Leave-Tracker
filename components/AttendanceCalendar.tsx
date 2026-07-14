@@ -12,6 +12,7 @@ interface AttendanceCalendarProps {
   onDateClick: (dateStr: string) => void;
   onDateLongPress?: (dateStr: string) => void;
   isReadOnly?: boolean;
+  effectiveStartDate: string;
 }
 
 export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
@@ -23,6 +24,7 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
   onDateClick,
   onDateLongPress,
   isReadOnly = false,
+  effectiveStartDate,
 }) => {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -102,6 +104,9 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
       days.push(<div key={`empty-${i}`} className="h-11 sm:h-14"></div>);
     }
 
+    const currentMonthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+    const isBeforeStart = currentMonthStr < effectiveStartDate;
+
     // Actual days
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -116,7 +121,7 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
 
       if (rawStatus) {
         displayStatus = rawStatus;
-      } else if (isPastOrToday) {
+      } else if (isPastOrToday && !isBeforeStart) {
         displayStatus = 'PRESENT';
         isImplicit = true;
       }

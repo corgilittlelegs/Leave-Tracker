@@ -24,16 +24,84 @@ export function readJSON<T>(key: string, fallback: T): T {
  * @param freeAbsentsPerMonth The user's allowed paid leaves per month
  * @param actualToday Stable date reference representing "today"
  */
+/**
+ * Resolves the effective start date (YYYY-MM) for calculations.
+ * If configStartDate is set, use it. Otherwise, fallback to the earliest month with any data.
+ */
+export function getEffectiveStartDate(
+  configStartDate: string | undefined,
+  attendance: AttendanceRecord,
+  cashAdvances: CashAdvance[],
+  settlements: { [monthStr: string]: number } | undefined
+): string {
+  if (configStartDate) return configStartDate;
+
+  const allMonthKeysSet = new Set<string>();
+
+  Object.keys(attendance).forEach(dateStr => {
+    const parts = dateStr.split('-');
+    if (parts.length >= 2) {
+      allMonthKeysSet.add(`${parts[0]}-${parts[1]}`);
+    }
+  });
+
+  cashAdvances.forEach(adv => {
+    const parts = adv.date.split('-');
+    if (parts.length >= 2) {
+      allMonthKeysSet.add(`${parts[0]}-${parts[1]}`);
+    }
+  });
+
+  if (settlements) {
+    Object.keys(settlements).forEach(monthKey => {
+      allMonthKeysSet.add(monthKey);
+    });
+  }
+
+  const allMonths = Array.from(allMonthKeysSet).sort();
+  if (allMonths.length > 0) {
+    return allMonths[0]; // Earliest month with data
+  }
+
+  // Fallback to current calendar month
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Calculates attendance and salary statistics for a specific month.
+ * 
+ * @param currentDate The currently viewed date (used to determine month and year)
+ * @param attendance The attendance registry mapping date strings (YYYY-MM-DD) to status
+ * @param baseSalary The user's configured monthly base salary
+ * @param freeAbsentsPerMonth The user's allowed paid leaves per month
+ * @param actualToday Stable date reference representing "today"
+ * @param effectiveStartDate The effective start date (YYYY-MM) before which the app is inactive
+ */
 export function calculateMonthStats(
   currentDate: Date,
   attendance: AttendanceRecord,
   baseSalary: number,
   freeAbsentsPerMonth: number,
-  actualToday: Date
+  actualToday: Date,
+  effectiveStartDate: string
 ): MonthStats {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const totalDays = new Date(year, month + 1, 0).getDate();
+  const currentMonthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+  // If this month is before the onboarding start month, return 0 stats
+  if (currentMonthStr < effectiveStartDate) {
+    return {
+      totalDays,
+      daysWorked: 0,
+      absentDays: 0,
+      deductibleAbsents: 0,
+      dailyRate: 0,
+      finalSalary: 0
+    };
+  }
   
   // Per day rate logic: Based on *current* active month total days
   const dailyRate = totalDays > 0 ? baseSalary / totalDays : 0;
@@ -95,7 +163,8 @@ export function calculateBalancesChain(
   settlements: { [monthStr: string]: number } | undefined,
   baseSalary: number,
   freeAbsentsPerMonth: number,
-  actualToday: Date
+  actualToday: Date,
+  effectiveStartDate: string
 ): {
   outstandingBalance: number; // Carried over into the target month
   currentMonthPayouts: number; // Total PAYOUT transactions recorded in target month
@@ -104,42 +173,10 @@ export function calculateBalancesChain(
   const targetYear = targetDate.getFullYear();
   const targetMonth = targetDate.getMonth(); // 0-indexed
 
-  // 1. Gather all months that have data (either in attendance or cash advances)
-  // as well as any month in settlements
   const allMonthKeysSet = new Set<string>();
   
-  Object.keys(attendance).forEach(dateStr => {
-    // dateStr is YYYY-MM-DD
-    const parts = dateStr.split('-');
-    if (parts.length >= 2) {
-      allMonthKeysSet.add(`${parts[0]}-${parts[1]}`);
-    }
-  });
-
-  cashAdvances.forEach(adv => {
-    const parts = adv.date.split('-');
-    if (parts.length >= 2) {
-      allMonthKeysSet.add(`${parts[0]}-${parts[1]}`);
-    }
-  });
-
-  if (settlements) {
-    Object.keys(settlements).forEach(monthKey => {
-      allMonthKeysSet.add(monthKey);
-    });
-  }
-
-  const allMonths = Array.from(allMonthKeysSet).sort();
-  if (allMonths.length === 0) {
-    return {
-      outstandingBalance: 0,
-      currentMonthPayouts: 0,
-      unsettledMonths: []
-    };
-  }
-
-  // Also add all months from the start of the earliest month found up to targetMonth
-  const [firstYear, firstMonth] = allMonths[0].split('-').map(Number);
+  // Fill all months from effectiveStartDate up to targetMonth
+  const [firstYear, firstMonth] = effectiveStartDate.split('-').map(Number);
   let tempDate = new Date(firstYear, firstMonth - 1, 1);
   const stopDate = new Date(targetYear, targetMonth, 1);
   while (tempDate < stopDate) {
@@ -147,6 +184,35 @@ export function calculateBalancesChain(
     const mth = String(tempDate.getMonth() + 1).padStart(2, '0');
     allMonthKeysSet.add(`${yr}-${mth}`);
     tempDate.setMonth(tempDate.getMonth() + 1);
+  }
+
+  // Add other months with actual data, only if they are >= effectiveStartDate
+  Object.keys(attendance).forEach(dateStr => {
+    const parts = dateStr.split('-');
+    if (parts.length >= 2) {
+      const monthKey = `${parts[0]}-${parts[1]}`;
+      if (monthKey >= effectiveStartDate) {
+        allMonthKeysSet.add(monthKey);
+      }
+    }
+  });
+
+  cashAdvances.forEach(adv => {
+    const parts = adv.date.split('-');
+    if (parts.length >= 2) {
+      const monthKey = `${parts[0]}-${parts[1]}`;
+      if (monthKey >= effectiveStartDate) {
+        allMonthKeysSet.add(monthKey);
+      }
+    }
+  });
+
+  if (settlements) {
+    Object.keys(settlements).forEach(monthKey => {
+      if (monthKey >= effectiveStartDate) {
+        allMonthKeysSet.add(monthKey);
+      }
+    });
   }
 
   // Sort chronologically
@@ -181,7 +247,7 @@ export function calculateBalancesChain(
 
     // This is a past month relative to the target month.
     // Calculate stats for this past month
-    const stats = calculateMonthStats(currentLoopDate, attendance, baseSalary, freeAbsentsPerMonth, actualToday);
+    const stats = calculateMonthStats(currentLoopDate, attendance, baseSalary, freeAbsentsPerMonth, actualToday, effectiveStartDate);
     const grossAccrued = stats.finalSalary;
     
     // Total due at the end of this past month

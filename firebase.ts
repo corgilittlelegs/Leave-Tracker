@@ -27,6 +27,7 @@ export interface TrackerData {
   freeAbsentsPerMonth: number;
   cashAdvances?: CashAdvance[];
   settlements?: { [monthStr: string]: number };
+  startDate?: string;
   updatedAt?: any;
 }
 
@@ -111,16 +112,20 @@ export async function deleteCashAdvance(syncCode: string, advanceId: string) {
   }
 }
 
-// Updates tracker configuration (salary & leave policy)
-export async function updateConfig(syncCode: string, baseSalary: number, freeAbsentsPerMonth: number) {
+// Updates tracker configuration (salary, leave policy, start date)
+export async function updateConfig(syncCode: string, baseSalary: number, freeAbsentsPerMonth: number, startDate?: string) {
   if (!syncCode) return;
   const docRef = doc(db, 'trackers', syncCode.toUpperCase().trim());
   try {
-    await updateDoc(docRef, {
+    const updates: any = {
       baseSalary,
       freeAbsentsPerMonth,
       updatedAt: serverTimestamp()
-    });
+    };
+    if (startDate !== undefined) {
+      updates.startDate = startDate;
+    }
+    await updateDoc(docRef, updates);
   } catch (error) {
     console.error('Error updating settings in Firestore:', error);
   }
