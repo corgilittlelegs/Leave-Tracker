@@ -3,10 +3,18 @@ import { Wallet, CalendarCheck, CalendarX, Calculator, Coins, Download, Sliders,
 import { AttendanceCalendar } from './components/AttendanceCalendar';
 import { StatCard } from './components/StatCard';
 import { SalaryVisualization } from './components/SalaryVisualization';
-import { MonthlySummaryModal } from './components/MonthlySummaryModal';
-import { QuickCashAdvanceModal } from './components/QuickCashAdvanceModal';
-import { WelcomeOnboardingModal } from './components/WelcomeOnboardingModal';
-import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
+const MonthlySummaryModal = React.lazy(() =>
+  import('./components/MonthlySummaryModal').then(module => ({ default: module.MonthlySummaryModal }))
+);
+const QuickCashAdvanceModal = React.lazy(() =>
+  import('./components/QuickCashAdvanceModal').then(module => ({ default: module.QuickCashAdvanceModal }))
+);
+const WelcomeOnboardingModal = React.lazy(() =>
+  import('./components/WelcomeOnboardingModal').then(module => ({ default: module.WelcomeOnboardingModal }))
+);
+const PWAUpdatePrompt = React.lazy(() =>
+  import('./components/PWAUpdatePrompt').then(module => ({ default: module.PWAUpdatePrompt }))
+);
 import { AttendanceRecord, AttendanceStatus, MonthStats, CashAdvance } from './types';
 import { APP_VERSION, BASE_SALARY, FREE_ABSENTS_PER_MONTH, MONTH_NAMES } from './constants';
 import { generateUniqueSyncCode, saveTrackerData, subscribeToTracker, checkSyncCodeExists, updateSingleAttendance, addCashAdvance, deleteCashAdvance, updateConfig } from './firebase';
@@ -949,28 +957,32 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      <MonthlySummaryModal
-        isOpen={isSummaryOpen}
-        onClose={() => setIsSummaryOpen(false)}
-        currentDate={currentDate}
-        attendance={attendance}
-        stats={stats}
-        baseSalary={baseSalary}
-        cashAdvances={cashAdvances}
-        totalMonthlyCashAdvances={totalMonthlyCashAdvances}
-        netPayable={netPayable}
-        freeAbsentsPerMonth={freeAbsentsPerMonth}
-        outstandingBalance={outstandingBalance}
-        currentMonthPayouts={currentMonthPayouts}
-      />
+      <React.Suspense fallback={null}>
+        <MonthlySummaryModal
+          isOpen={isSummaryOpen}
+          onClose={() => setIsSummaryOpen(false)}
+          currentDate={currentDate}
+          attendance={attendance}
+          stats={stats}
+          baseSalary={baseSalary}
+          cashAdvances={cashAdvances}
+          totalMonthlyCashAdvances={totalMonthlyCashAdvances}
+          netPayable={netPayable}
+          freeAbsentsPerMonth={freeAbsentsPerMonth}
+          outstandingBalance={outstandingBalance}
+          currentMonthPayouts={currentMonthPayouts}
+        />
+      </React.Suspense>
 
-      <WelcomeOnboardingModal
-        isOpen={showOnboarding}
-        defaultBaseSalary={BASE_SALARY}
-        defaultFreeLeaves={FREE_ABSENTS_PER_MONTH}
-        onComplete={handleCompleteOnboarding}
-        onLink={handleLinkOnboarding}
-      />
+      <React.Suspense fallback={null}>
+        <WelcomeOnboardingModal
+          isOpen={showOnboarding}
+          defaultBaseSalary={BASE_SALARY}
+          defaultFreeLeaves={FREE_ABSENTS_PER_MONTH}
+          onComplete={handleCompleteOnboarding}
+          onLink={handleLinkOnboarding}
+        />
+      </React.Suspense>
 
       {/* Settings Sliding Drawer */}
       <div className={`fixed inset-0 z-50 overflow-hidden print:hidden transition-all duration-300 ${isSettingsOpen ? 'visible pointer-events-auto' : 'invisible pointer-events-none'}`}>
@@ -1236,18 +1248,22 @@ const App: React.FC = () => {
 
       {/* Quick Cash Advance Modal */}
       {longPressedDate && (
-        <QuickCashAdvanceModal
-          dateStr={longPressedDate}
-          cashAdvances={cashAdvances}
-          outstandingBalance={outstandingBalance}
-          onClose={() => setLongPressedDate(null)}
-          onAddAdvance={handleAddAdvance}
-          onDeleteAdvance={handleDeleteAdvance}
-        />
+        <React.Suspense fallback={null}>
+          <QuickCashAdvanceModal
+            dateStr={longPressedDate}
+            cashAdvances={cashAdvances}
+            outstandingBalance={outstandingBalance}
+            onClose={() => setLongPressedDate(null)}
+            onAddAdvance={handleAddAdvance}
+            onDeleteAdvance={handleDeleteAdvance}
+          />
+        </React.Suspense>
       )}
 
       {/* PWA Update Prompt */}
-      <PWAUpdatePrompt />
+      <React.Suspense fallback={null}>
+        <PWAUpdatePrompt />
+      </React.Suspense>
     </div>
   );
 };
