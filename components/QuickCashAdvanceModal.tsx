@@ -40,6 +40,12 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  useEffect(() => {
+    if (outstandingBalance <= 0 && txType === 'PAYOUT') {
+      setTxType('ADVANCE');
+    }
+  }, [outstandingBalance, txType]);
+
   // Format YYYY-MM-DD to readable date
   const readableDate = useMemo(() => {
     try {
@@ -72,7 +78,7 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
     }
 
     if (txType === 'PAYOUT' && parsedAmount > outstandingBalance) {
-      setError(`Payout amount cannot exceed the outstanding balance of ₹${outstandingBalance.toLocaleString()}.`);
+      setError(`Payout amount cannot exceed the remaining outstanding balance of ₹${outstandingBalance.toLocaleString()}.`);
       return;
     }
 
@@ -182,7 +188,7 @@ export const QuickCashAdvanceModal: React.FC<QuickCashAdvanceModalProps> = ({
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-medium">
                   {txType === 'ADVANCE'
                     ? "This amount will be deducted from the current month's accrued salary."
-                    : `This amount will pay off part or all of the ₹${outstandingBalance.toLocaleString()} outstanding balance.`}
+                    : `This amount will pay off part or all of the ₹${outstandingBalance.toLocaleString()} remaining outstanding balance.`}
                 </p>
               </div>
             )}

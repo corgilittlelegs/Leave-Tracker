@@ -134,4 +134,20 @@ describe('calculateBalancesChain', () => {
     expect(res.outstandingBalance).toBe(29000);
     expect(res.unsettledMonths).toEqual(['2026-06']);
   });
+
+  it('correctly calculates remaining outstanding after partial current month payouts', () => {
+    const cashAdvances = [
+      { id: '1', amount: 10000, date: '2026-05-10', description: 'May advance', type: 'ADVANCE' as const },
+      { id: '2', amount: 4000, date: '2026-06-05', description: 'June partial payout', type: 'PAYOUT' as const }
+    ];
+
+    const targetDate = new Date(2026, 5, 1); // June 2026
+    const res = calculateBalancesChain(targetDate, {}, cashAdvances, {}, baseSalary, freeAbsents, actualToday, '2026-05');
+
+    // May gross accrued: 30000 - 10000 advance = 20000 carried into June
+    expect(res.outstandingBalance).toBe(20000);
+    expect(res.currentMonthPayouts).toBe(4000);
+    const netRemainingOutstanding = Math.max(0, res.outstandingBalance - res.currentMonthPayouts);
+    expect(netRemainingOutstanding).toBe(16000);
+  });
 });

@@ -576,6 +576,7 @@ const App: React.FC = () => {
 
   const outstandingBalance = balanceInfo.outstandingBalance;
   const currentMonthPayouts = balanceInfo.currentMonthPayouts;
+  const remainingOutstanding = Math.max(0, outstandingBalance - currentMonthPayouts);
   const unsettledMonths = balanceInfo.unsettledMonths;
 
   const earliestUnsettledMonth = useMemo(() => {
@@ -870,8 +871,14 @@ const App: React.FC = () => {
                 icon={Wallet} 
                 colorClass="bg-emerald-500 text-emerald-600"
                 subtext={
-                  outstandingBalance > 0 || currentMonthPayouts > 0
-                    ? `Inc. ₹${outstandingBalance.toLocaleString()} carry & -₹${currentMonthPayouts.toLocaleString()} payout`
+                  outstandingBalance > 0
+                    ? currentMonthPayouts > 0
+                      ? remainingOutstanding > 0
+                        ? `Inc. ₹${remainingOutstanding.toLocaleString()} net carry (-₹${currentMonthPayouts.toLocaleString()} paid)`
+                        : `Prev. carry of ₹${outstandingBalance.toLocaleString()} fully paid`
+                      : `Inc. ₹${outstandingBalance.toLocaleString()} carry`
+                    : currentMonthPayouts > 0
+                    ? `-₹${currentMonthPayouts.toLocaleString()} payout`
                     : "Accrued minus advances"
                 }
             />
@@ -1279,7 +1286,7 @@ const App: React.FC = () => {
           <QuickCashAdvanceModal
             dateStr={longPressedDate}
             cashAdvances={cashAdvances}
-            outstandingBalance={outstandingBalance}
+            outstandingBalance={remainingOutstanding}
             onClose={() => setLongPressedDate(null)}
             onAddAdvance={handleAddAdvance}
             onDeleteAdvance={handleDeleteAdvance}
